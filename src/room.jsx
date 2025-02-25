@@ -126,7 +126,7 @@ function Room() {
   return (
 
     <div style={styles.container}>
-    {remoteId && <button onClick={()=>{}}>Send stream </button>}
+    {remoteId && <button onClick={()=>{sendStream()}}>Send stream </button>}
       {myStream && (
         <div style={styles.videoWrapper}>
           <p style={styles.label}>My Stream</p>

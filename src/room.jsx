@@ -219,10 +219,7 @@ function Room() {
         <div className="flex-1 flex flex-col space-y-4">
           {/* Remote Stream */}
           {remoteStream && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="relative  bg-black rounded-xl lg:h-full h-2/3 overflow-hidden shadow-2xl border-2 border-cyan-400"
+            <div className="relative  bg-black rounded-xl lg:h-full h-2/3 overflow-hidden shadow-2xl border-2 border-cyan-400"
             >
               <div className="absolute top-2 left-2 bg-black/50 px-3 py-1 rounded-full text-cyan-400 text-sm">
                 Partner
@@ -234,7 +231,7 @@ function Room() {
                 height="100%"
                 className="rounded-lg"
               />
-            </motion.div>
+            </div>
           )}
 
           {/* Local Stream */}

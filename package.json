@@ -7,12 +7,18 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^13.5.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "assert": "^2.1.0",
+    "events": "^3.3.0",
+    "framer-motion": "^12.4.7",
+    "os-browserify": "^0.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "react-player": "^2.16.0",
     "react-router-dom": "^7.2.0",
-    "react-scripts": "5.0.1",
+    "react-scripts": "^5.0.1",
     "socket.io-client": "^4.8.1",
+    "stream-browserify": "^3.0.0",
+    "util": "^0.12.5",
     "web-vitals": "^2.1.4"
   },
   "scripts": {
@@ -38,5 +44,9 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.3"
   }
 }

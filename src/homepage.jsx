@@ -1,34 +1,38 @@
-import {  useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "./providers/socket";
 
 const HomePage = () => {
-  const [roomId, setRoomId] = useState("");
   const navigate = useNavigate();
-  const {socket} =useSocket();
+  const { socket } = useSocket();
 
+  const handleJoinChatRoom = () => {
+    socket.emit("joinChatRoom");
+    navigate(`/chatRoom`);
+  };
 
-
-  const handleJoinRoom = () => {
-    if (!roomId.trim()) return;
-
-    // Emit event with correct roomId
-    socket.emit("joinRoom", roomId);
-
-    // Navigate to the room page
-    navigate(`/room/${roomId}`);
+  const handleJoinVideoRoom = () => {
+    socket.emit("joinVideoRoom");
+    navigate(`/videoRoom/`);
   };
 
   return (
-    <div>
-      <h1>Enter Room ID</h1>
-      <input
-        type="text"
-        placeholder="Enter Room ID"
-        value={roomId}
-        onChange={(e) => setRoomId(e.target.value)}
-      />
-      <button onClick={handleJoinRoom}>Join Room</button>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <h1 className="text-4xl font-bold mb-8">Welcome</h1>
+      <p className="text-lg mb-4">Join a random Chat or Video room:</p>
+      <div className="flex gap-4">
+        <button
+          onClick={handleJoinChatRoom}
+          className="px-6 py-3 font-semibold text-white bg-green-500 rounded-md transition hover:bg-green-600"
+        >
+          Join Chat Room
+        </button>
+        <button
+          onClick={handleJoinVideoRoom}
+          className="px-6 py-3 font-semibold text-white bg-blue-500 rounded-md transition hover:bg-blue-600"
+        >
+          Join Video Room
+        </button>
+      </div>
     </div>
   );
 };

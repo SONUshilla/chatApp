@@ -3,6 +3,7 @@ import { SocketProvider } from "./providers/socket";
 import { PeerProvider } from "./providers/peer";
 import HomePage from "./homepage";
 import Room from "./room";
+import Chat from "./chatRoom";
 
 const App = () => {
   return (
@@ -10,7 +11,8 @@ const App = () => {
       <PeerProvider>
         <Routes>
           <Route path="/" element=<HomePage /> />
-          <Route path="/room/:roomId" element=<Room/> />
+          <Route path="/chatRoom" element=<Chat/> />
+          <Route path="/videoRoom" element=<Room/> />
         </Routes>
       </PeerProvider>
     </SocketProvider>

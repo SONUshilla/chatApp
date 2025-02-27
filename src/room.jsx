@@ -122,13 +122,13 @@ function Room() {
       const { ans } = data;
       try {
         await setRemoteAns(ans);
-        sendStream();
+   
         console.log("Call accepted, connection established.");
       } catch (error) {
         console.error("Error setting remote answer:", error);
       }
     },
-    [sendStream, setRemoteAns]
+    [setRemoteAns]
   );
   const handleNegoIncomingCall = useCallback(
     async (data) => {
@@ -136,13 +136,12 @@ function Room() {
       console.log("Nego Incoming call from:", id);
       try {
         const ans = await createAnswer(offer);
-        sendStream();
         socket.emit("nego-call-accepted", { id, ans });
       } catch (error) {
         console.error("Error creating answer:", error);
       }
     },
-    [createAnswer, sendStream, socket]
+    [createAnswer, socket]
   );
 
   const handleNegoCallAccepted = useCallback(
@@ -150,13 +149,12 @@ function Room() {
       const { ans } = data;
       try {
         await setRemoteAns(ans);
-        sendStream();
         console.log("Nego Call accepted, connection established.");
       } catch (error) {
         console.error("Error setting remote answer:", error);
       }
     },
-    [sendStream, setRemoteAns]
+    [setRemoteAns]
   );
   useEffect(() => {
     const handleTrackEvent = (event) => {
@@ -215,6 +213,7 @@ function Room() {
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+    <button  className="bg-green-500 p-3 " onClick={(e)=>{sendStream()}}>Send stream</button>
       <div className="flex h-full  p-4 space-x-4 relative">
         {/* Video Streams Section */}
         <div className="flex-1 flex flex-col space-y-4">

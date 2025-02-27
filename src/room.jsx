@@ -121,6 +121,7 @@ function Room() {
       const { id, offer } = data;
       console.log("Nego Incoming call from:", id);
       try {
+        console.log(offer);
         const ans = await createAnswer(offer);
         sendStream();
         socket.emit("nego-call-accepted", { id, ans });

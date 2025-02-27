@@ -91,6 +91,7 @@ export const PeerProvider = ({ children }) => {
         return answer;
       }
       setIsNegotiating(true);
+      console.log("this is pffer",offer);
       await peer.setRemoteDescription(offer);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);

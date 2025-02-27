@@ -116,21 +116,7 @@ function Room() {
     },
     [sendStream, setRemoteAns]
   );
-  const handleNegoIncomingCall = useCallback(
-    async (data) => {
-      const { id, offer } = data;
-      console.log("Nego Incoming call from:", id);
-      try {
-        console.log(offer);
-        const ans = await createAnswer(offer);
-        sendStream();
-        socket.emit("nego-call-accepted", { id, ans });
-      } catch (error) {
-        console.error("Error creating answer:", error);
-      }
-    },
-    [createAnswer, sendStream, socket]
-  );
+
 
   const handleNegoCallAccepted = useCallback(
     async (data) => {
@@ -224,28 +210,50 @@ const handlePartnerDisconnected = useCallback(async () => {
     };
   }, [peer, sendStream, socket, myStream]);
 
-  useEffect(() => {
-    const handleNegotiation = async () => {
-      try {
-        if (!remoteId) {
-          console.log("Remote ID not set, skipping negotiation.");
-          return;
-        }
-        console.log("Negotiation needed, creating offer...");
-        const offer = await createOffer();
-
-        socket.emit("nego-call-user", { id: remoteId, offer });
-      } catch (error) {
-        console.error("Error during negotiation:", error);
+  const handleNegotiation = useCallback(async () => {
+    try {
+      if (!remoteId) {
+        console.log("Remote ID not set, skipping negotiation.");
+        return;
       }
-    };
+      console.log("Negotiation needed, creating offer...");
+      const offer = await createOffer();
+      socket.emit("nego-call-user", { id: remoteId, offer });
+    } catch (error) {
+      console.error("Error during negotiation:", error);
+    }
+  }, [remoteId, createOffer, socket]);
+  
+  
+  useEffect(() => {
 
     peer.addEventListener("negotiationneeded", handleNegotiation);
 
     return () => {
       peer.removeEventListener("negotiationneeded", handleNegotiation);
     };
-  }, [peer, createOffer, socket, remoteId]);
+  }, [peer, createOffer, socket, remoteId, handleNegotiation]);
+
+  const handleNegoIncomingCall = useCallback(
+    async (data) => {
+  
+      const { id, offer } = data;
+      if(!offer)
+        {
+          handleNegotiation();
+        }
+      console.log("Nego Incoming call from:", id);
+      try {
+        console.log(offer);
+        const ans = await createAnswer(offer);
+        sendStream();
+        socket.emit("nego-call-accepted", { id, ans });
+      } catch (error) {
+        console.error("Error creating answer:", error);
+      }
+    },
+    [createAnswer, sendStream, socket]
+  );
 
   useEffect(() => {
     socket.on("joined-room", handleRoomJoined);

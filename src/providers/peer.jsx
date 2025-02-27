@@ -11,18 +11,13 @@ export const PeerProvider = ({ children }) => {
     () =>
       new RTCPeerConnection({
         iceServers: [
-          { urls: "stun:stun.l.google.com:19302" }, // Fastest STUN
-          { urls: "stun:global.stun.twilio.com:3478" }, // Extra STUN for backup
+          { urls: "stun:stun.l.google.com:19302" }, // Google STUN for fast NAT traversal
+  
           {
-            urls: "turn:relay1.expressturn.com",
-            username: "efilter",
-            credential: "efilter",
-          }, // Free TURN server (limited use)
-          {
-            urls: "turn:numb.viagenie.ca",
-            username: "webrtc@live.com",
-            credential: "muazkh",
-          }, // Another free TURN server (may be slow)
+            urls: "turn:relay1.expressturn.com:3478",
+            username: "efLJ3KCRYOU1FDA7QD",
+            credential: "ZZHlXOfsINKMXOlZ",
+          },
         ],
       }),
 

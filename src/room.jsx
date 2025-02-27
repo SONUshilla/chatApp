@@ -13,43 +13,30 @@ function Room() {
   const [chat, setChat] = useState([]);
   const [message, setMessage] = useState("");
   const [room, setRoom] = useState("");
+  const [buttonText,setButtonText]=useState("Start New Chat");
   const [status, setStatus] = useState("waiting");
+  const [iceState, setIceState] = useState(null);
 
-
-  const handleRoom = useCallback(
-    async (data) => {
-      const {room}=data;
-      setRoom(room);
-    },
-    []
-  );
+  const handleRoom = useCallback(async (data) => {
+    const { room } = data;
+    setRoom(room);
+  }, []);
   useEffect(() => {
     socket.on("waiting", () => setStatus("waiting"));
-    socket.on("roomJoined",handleRoom);
+    socket.on("roomJoined", handleRoom);
     socket.on("message", (msg) =>
       setChat((prev) => [...prev, { text: msg, isMe: false }])
     );
-    socket.on("partner-disconnected", () => {
-      setChat((prev) => [
-        ...prev,
-        {
-          text: "Partner has disconnected. Searching for new partner...",
-          isSystem: true,
-        },
-      ]);
-    });
-
+  
     socket.on("notification", (data) => {
-      setChat([
-        { text: data.message, isSystem: true },
-      ]);
+      setChat([{ text: data.message, isSystem: true }]);
     });
 
     return () => {
       socket.off("waiting");
-      socket.off("room-joined",handleRoom);
+      socket.off("roomJoined", handleRoom);
     };
-  // eslint-disable-next-line no-use-before-define
+    // eslint-disable-next-line no-use-before-define
   }, [handleRoom, socket]);
 
   const handleSendMessage = (e) => {
@@ -72,7 +59,7 @@ function Room() {
           video: true,
         });
         setMyStream(stream);
-  
+
         const offer = await createOffer();
         socket.emit("call-user", { id, offer });
         console.log("Offer sent to user:", id);
@@ -85,16 +72,15 @@ function Room() {
   const sendStream = useCallback(() => {
     if (myStream) {
       myStream.getTracks().forEach((track) => {
-        const senderExists = peer.getSenders().some(
-          (sender) => sender.track === track
-        );
+        const senderExists = peer
+          .getSenders()
+          .some((sender) => sender.track === track);
         if (!senderExists) {
           peer.addTrack(track, myStream);
         }
       });
     }
   }, [myStream, peer]);
-  
 
   const handleIncomingCall = useCallback(
     async (data) => {
@@ -107,7 +93,7 @@ function Room() {
         });
         setMyStream(stream);
         setRemoteId(id);
-        
+
         const ans = await createAnswer(offer);
         socket.emit("call-accepted", { id, ans });
       } catch (error) {
@@ -158,6 +144,22 @@ function Room() {
     },
     [sendStream, setRemoteAns]
   );
+
+  const handlePartnerDisconnected = useCallback(async () => {
+    try {
+      socket.emit("joinVideoRoom");
+      console.log("this is running 2");
+      setChat((prev) => [
+        ...prev,
+        {
+          text: "Partner has disconnected. Searching for new partner...",
+          isSystem: true,
+        },
+      ]);
+    } catch (error) {
+      console.error("Error setting remote answer:", error);
+    }
+  }, [socket]);
   useEffect(() => {
     const handleTrackEvent = (event) => {
       console.log("Received remote stream", event.streams[0]);
@@ -171,7 +173,25 @@ function Room() {
     };
   }, [peer]);
 
+  peer.oniceconnectionstatechange = () => {
+    console.log("ICE Connection State:", peer.iceConnectionState);
+    setIceState(peer.iceConnectionState);
 
+    if (peer.iceConnectionState === "connected") {
+      console.log("ICE state connected");
+      setButtonText("End Call");
+      setStatus("paired");
+      sendStream();
+    } else if (
+      peer.iceConnectionState === "disconnected" ||
+      peer.iceConnectionState === "failed"
+    ) {
+      console.log("ICE connection disconnected or failed, retrying connection");
+      // Clear the remote connection state
+      setRemoteStream(null);
+      setRemoteId(null);   
+    }
+  };
   useEffect(() => {
     const handleNegotiation = async () => {
       try {
@@ -181,7 +201,7 @@ function Room() {
         }
         console.log("Negotiation needed, creating offer...");
         const offer = await createOffer();
-     
+
         socket.emit("nego-call-user", { id: remoteId, offer });
       } catch (error) {
         console.error("Error during negotiation:", error);
@@ -195,14 +215,13 @@ function Room() {
     };
   }, [peer, createOffer, socket, remoteId]);
 
-
-  
   useEffect(() => {
     socket.on("joined-room", handleRoomJoined);
     socket.on("incoming-call", handleIncomingCall);
     socket.on("call-accepted", handleCallAccepted);
     socket.on("nego-incoming-call", handleNegoIncomingCall);
     socket.on("nego-call-accepted", handleNegoCallAccepted);
+    socket.on("partner-disconnected", handlePartnerDisconnected);
 
     return () => {
       socket.off("joined-room", handleRoomJoined);
@@ -210,18 +229,43 @@ function Room() {
       socket.off("call-accepted", handleCallAccepted);
       socket.off("nego-incoming-call", handleNegoIncomingCall);
       socket.off("nego-call-accepted", handleNegoCallAccepted);
+      socket.off("partner-disconnected", handlePartnerDisconnected);
     };
-  }, [socket, handleRoomJoined, handleIncomingCall, handleCallAccepted, handleNegoIncomingCall, handleNegoCallAccepted]);
+  }, [
+    socket,
+    handleRoomJoined,
+    handleIncomingCall,
+    handleCallAccepted,
+    handleNegoIncomingCall,
+    handleNegoCallAccepted,
+    handlePartnerDisconnected,
+  ]);
+
+
+  const handleCallEnded =()=>{
+    if(buttonText==="End Call")
+    {
+      setButtonText("really");
+    }
+    else if(buttonText==="really"){
+        setButtonText("Start New Chat");
+        socket.emit("endChat",room);
+    }
+    else{
+      console.log("this is runnig");
+      socket.emit("joinVideoRoom");
+      
+    }
+  }
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
       <div className="flex h-full  p-4 space-x-4 relative">
         {/* Video Streams Section */}
         <div className="flex-1 flex flex-col space-y-4">
-          {/* Remote Stream */}
-          {remoteStream && (
-            <div className="relative  bg-black rounded-xl lg:h-full h-2/3 overflow-hidden shadow-2xl border-2 border-cyan-400"
-            >
+          {/* Remote Stream or Connecting Placeholder */}
+          {remoteStream ? (
+            <div className="relative bg-black rounded-xl lg:h-full h-2/3 overflow-hidden shadow-2xl border-2 border-cyan-400">
               <div className="absolute top-2 left-2 bg-black/50 px-3 py-1 rounded-full text-cyan-400 text-sm">
                 Partner
               </div>
@@ -232,6 +276,13 @@ function Room() {
                 height="100%"
                 className="rounded-lg"
               />
+            </div>
+          ) : (
+            <div className="relative bg-black rounded-xl lg:h-full h-2/3 flex items-center justify-center shadow-2xl border-2 border-cyan-400">
+              <div className="flex flex-col items-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-400 mb-4"></div>
+                <span className="text-cyan-400 text-sm">Connecting...</span>
+              </div>
             </div>
           )}
 
@@ -348,11 +399,22 @@ function Room() {
           </svg>
         </button>
       </div>
-      <div className="absolute flex bottom-5 w-full justify-center  text-white px-1 py-2 rounded">
-        <button  className="bg-red-700 p-4 rounded-lg">
-          <span>End Call</span>
+      <div className="absolute flex bottom-5 w-full justify-center text-white px-1 py-2 rounded">
+      {status === "waiting" ? (
+        <div className="bg-blue-500 p-4 rounded-lg">
+          <span>Searching</span>
+        </div>
+      ) : (
+        <button
+          onClick={handleCallEnded}
+          className={`${
+            buttonText === "Start New Chat" ? "bg-green-600" : "bg-red-700"
+          } p-4 rounded-lg`}
+        >
+          <span>{buttonText}</span>
         </button>
-      </div>
+      )}
+    </div>
     </div>
   );
 }

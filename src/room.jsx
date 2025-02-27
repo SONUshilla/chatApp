@@ -150,12 +150,13 @@ function Room() {
       const { ans } = data;
       try {
         await setRemoteAns(ans);
+        sendStream();
         console.log("Nego Call accepted, connection established.");
       } catch (error) {
         console.error("Error setting remote answer:", error);
       }
     },
-    [setRemoteAns]
+    [sendStream, setRemoteAns]
   );
   useEffect(() => {
     const handleTrackEvent = (event) => {

@@ -11,9 +11,14 @@ export const PeerProvider = ({ children }) => {
     () =>
       new RTCPeerConnection({
         iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "turn:relay1.expressturn.com", username: "efilter", credential: "efilter" }, // Free test TURN server
-  ],
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:global.stun.twilio.com:3478" },
+          {
+            urls: "turn:relay1.expressturn.com",
+            username: "efilter",
+            credential: "efilter",
+          },
+        ],
       }),
       
     []

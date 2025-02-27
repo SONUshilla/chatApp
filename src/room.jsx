@@ -158,12 +158,13 @@ const handlePartnerDisconnected = useCallback(async () => {
     }]);
     setRemoteStream(null);
     setRemoteId(null);
+    peer.close();
     socket.emit("joinVideoRoom");
     setStatus("waiting");
   } catch (error) {
     console.error("Error handling disconnect:", error);
   }
-}, [socket, myStream]);
+}, [myStream, peer, socket]);
 
   useEffect(() => {
     const handleTrackEvent = (event) => {
@@ -192,7 +193,6 @@ const handlePartnerDisconnected = useCallback(async () => {
         sendStream();
       } else if (state === "failed") {
         console.log("ICE connection failed, restarting...");
-        peer.close();
         socket.emit("joinVideoRoom");
         setRemoteStream(null);
         setRemoteId(null);
@@ -200,6 +200,7 @@ const handlePartnerDisconnected = useCallback(async () => {
           myStream.getTracks().forEach((track) => track.stop());
           setMyStream(null);
         }
+        peer.close();
         setChat((prev) => [
           ...prev,
           {
@@ -277,12 +278,12 @@ const handlePartnerDisconnected = useCallback(async () => {
       setButtonText("really");
     } else if (buttonText === "really") {
       setButtonText("Start New Chat");
-      socket.emit("endChat", room);
-      peer.close();
       if (myStream) {
         myStream.getTracks().forEach(track => track.stop());
         setMyStream(null);
       }
+      socket.emit("endChat", room);
+      peer.close();
       setRemoteStream(null);
       setRemoteId(null);
     } else {

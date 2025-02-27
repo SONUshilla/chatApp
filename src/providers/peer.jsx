@@ -38,10 +38,7 @@ export const PeerProvider = ({ children }) => {
 
   // Function to clean up and reinitialize the peer connection
   const reinitializePeer = () => {
-    if (peer && peer.signalingState !== "closed") {
-      // Clean up: Close the connection
-      peer.close();
-    }
+   
     const newPeer = new RTCPeerConnection(ICE_CONFIG);
     setPeer(newPeer);
     return newPeer;
@@ -54,16 +51,20 @@ export const PeerProvider = ({ children }) => {
         return;
       }
       // Check that the connection is in a stable state
-      if (peer.signalingState !== "stable") {
+      if(peer.signalingState==="closed")
+      {
         console.warn(
           `Peer not in stable state (${peer.signalingState}). Reinitializing...`
         );
-        reinitializePeer();
+        const newpeer=reinitializePeer();
+        const offer = await newpeer.createOffer();
+        await newpeer.setLocalDescription(offer);
+        return offer;
       }
       setIsNegotiating(true);
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      return offer;
+      return offer;   
     } catch (error) {
       console.error("Error creating offer:", error);
       throw error;
@@ -79,11 +80,15 @@ export const PeerProvider = ({ children }) => {
         return;
       }
       // Expect the peer to be in a stable state before receiving an offer.
-      if (peer.signalingState !== "stable") {
+      if (peer.signalingState === "closed") {
         console.warn(
           `Peer not in stable state (${peer.signalingState}) before setting remote offer. Reinitializing...`
         );
-        reinitializePeer();
+        const newpeer=reinitializePeer();
+        await newpeer.setRemoteDescription(offer);
+        const answer = await newpeer.createAnswer();
+        await newpeer.setLocalDescription(answer);
+        return answer;
       }
       setIsNegotiating(true);
       await peer.setRemoteDescription(offer);

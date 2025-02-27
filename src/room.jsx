@@ -13,7 +13,7 @@ function Room() {
   const [chat, setChat] = useState([]);
   const [message, setMessage] = useState("");
   const [room, setRoom] = useState("");
-  const [buttonText,setButtonText]=useState("Start New Chat");
+  const [buttonText, setButtonText] = useState("Start New Chat");
   const [status, setStatus] = useState("waiting");
   const [iceState, setIceState] = useState(null);
 
@@ -27,7 +27,7 @@ function Room() {
     socket.on("message", (msg) =>
       setChat((prev) => [...prev, { text: msg, isMe: false }])
     );
-  
+
     socket.on("notification", (data) => {
       setChat([{ text: data.message, isSystem: true }]);
     });
@@ -144,22 +144,26 @@ function Room() {
     },
     [sendStream, setRemoteAns]
   );
+// Update handlePartnerDisconnected
+const handlePartnerDisconnected = useCallback(async () => {
+  try {
 
-  const handlePartnerDisconnected = useCallback(async () => {
-    try {
-      socket.emit("joinVideoRoom");
-      console.log("this is running 2");
-      setChat((prev) => [
-        ...prev,
-        {
-          text: "Partner has disconnected. Searching for new partner...",
-          isSystem: true,
-        },
-      ]);
-    } catch (error) {
-      console.error("Error setting remote answer:", error);
+    if (myStream) {
+      myStream.getTracks().forEach(track => track.stop());
+      setMyStream(null);
     }
-  }, [socket]);
+    setChat(prev => [...prev, { 
+      text: "Partner disconnected. Searching...", 
+      isSystem: true 
+    }]);
+    setRemoteStream(null);
+    setRemoteId(null);
+    socket.emit("joinVideoRoom");
+    setStatus("waiting");
+  } catch (error) {
+    console.error("Error handling disconnect:", error);
+  }
+}, [socket, myStream]);
 
   useEffect(() => {
     const handleTrackEvent = (event) => {
@@ -174,35 +178,50 @@ function Room() {
     };
   }, [peer]);
 
-  peer.oniceconnectionstatechange = () => {
-    console.log("ICE Connection State:", peer.iceConnectionState);
-    setIceState(peer.iceConnectionState);
+  // Replace the oniceconnectionstatechange with useEffect
+  useEffect(() => {
+    const handleIceConnectionStateChange = () => {
+      const state = peer.iceConnectionState;
+      console.log("ICE Connection State:", state);
+      setIceState(state);
 
-    if (peer.iceConnectionState === "connected") {
-      console.log("ICE state connected");
-      setButtonText("End Call");
-      setStatus("paired");
-      sendStream();
-      const handleTrackEvent = (event) => {
-        console.log("Received remote stream", event.streams[0]);
-        setRemoteStream(event.streams[0]);
-      };
-  
-      peer.addEventListener("track", handleTrackEvent);
-  
-      return () => {
-        peer.removeEventListener("track", handleTrackEvent);
-      };
-      
-    } else if (
-      peer.iceConnectionState === "failed"
-    ) {
-      console.log("ICE connection disconnected or failed, retrying connection");
-      // Clear the remote connection state
-      setRemoteStream(null);
-      setRemoteId(null);   
-    }
-  };
+      if (state === "connected" || state === "completed") {
+        console.log("ICE state connected");
+        setButtonText("End Call");
+        setStatus("paired");
+        sendStream();
+      } else if (state === "failed") {
+        console.log("ICE connection failed, restarting...");
+        peer.close();
+        socket.emit("joinVideoRoom");
+        setRemoteStream(null);
+        setRemoteId(null);
+        if (myStream) {
+          myStream.getTracks().forEach((track) => track.stop());
+          setMyStream(null);
+        }
+        setChat((prev) => [
+          ...prev,
+          {
+            text: "Connection failed. Searching for new partner...",
+            isSystem: true,
+          },
+        ]);
+      }
+    };
+
+    peer.addEventListener(
+      "iceconnectionstatechange",
+      handleIceConnectionStateChange
+    );
+    return () => {
+      peer.removeEventListener(
+        "iceconnectionstatechange",
+        handleIceConnectionStateChange
+      );
+    };
+  }, [peer, sendStream, socket, myStream]);
+
   useEffect(() => {
     const handleNegotiation = async () => {
       try {
@@ -252,22 +271,27 @@ function Room() {
     handlePartnerDisconnected,
   ]);
 
-
-  const handleCallEnded =()=>{
-    if(buttonText==="End Call")
-    {
+   // Update handleCallEnded to stop tracks and reset state
+   const handleCallEnded = () => {
+    if (buttonText === "End Call") {
       setButtonText("really");
-    }
-    else if(buttonText==="really"){
-        setButtonText("Start New Chat");
-        socket.emit("endChat",room);
-    }
-    else{
-      console.log("this is runnig");
+    } else if (buttonText === "really") {
+      setButtonText("Start New Chat");
+      socket.emit("endChat", room);
+      peer.close();
+      if (myStream) {
+        myStream.getTracks().forEach(track => track.stop());
+        setMyStream(null);
+      }
+      setRemoteStream(null);
+      setRemoteId(null);
+    } else {
+      setRemoteStream(null);
+      setRemoteId(null);
       socket.emit("joinVideoRoom");
-      
+      setStatus("waiting");
     }
-  }
+  };
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
@@ -411,21 +435,21 @@ function Room() {
         </button>
       </div>
       <div className="absolute flex bottom-5 w-full justify-center text-white px-1 py-2 rounded">
-      {status === "waiting" ? (
-        <div className="bg-blue-500 p-4 rounded-lg">
-          <span>Searching</span>
-        </div>
-      ) : (
-        <button
-          onClick={handleCallEnded}
-          className={`${
-            buttonText === "Start New Chat" ? "bg-green-600" : "bg-red-700"
-          } p-4 rounded-lg`}
-        >
-          <span>{buttonText}</span>
-        </button>
-      )}
-    </div>
+        {status === "waiting" ? (
+          <div className="bg-blue-500 p-4 rounded-lg">
+            <span>Searching</span>
+          </div>
+        ) : (
+          <button
+            onClick={handleCallEnded}
+            className={`${
+              buttonText === "Start New Chat" ? "bg-green-600" : "bg-red-700"
+            } p-4 rounded-lg`}
+          >
+            <span>{buttonText}</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }

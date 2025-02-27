@@ -160,6 +160,7 @@ function Room() {
       console.error("Error setting remote answer:", error);
     }
   }, [socket]);
+
   useEffect(() => {
     const handleTrackEvent = (event) => {
       console.log("Received remote stream", event.streams[0]);
@@ -182,8 +183,18 @@ function Room() {
       setButtonText("End Call");
       setStatus("paired");
       sendStream();
+      const handleTrackEvent = (event) => {
+        console.log("Received remote stream", event.streams[0]);
+        setRemoteStream(event.streams[0]);
+      };
+  
+      peer.addEventListener("track", handleTrackEvent);
+  
+      return () => {
+        peer.removeEventListener("track", handleTrackEvent);
+      };
+      
     } else if (
-      peer.iceConnectionState === "disconnected" ||
       peer.iceConnectionState === "failed"
     ) {
       console.log("ICE connection disconnected or failed, retrying connection");

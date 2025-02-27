@@ -10,20 +10,35 @@ export const PeerProvider = ({ children }) => {
   const peer = useMemo(
     () =>
       new RTCPeerConnection({
-       iceServers: [
-            { url: 'stun:stun.l.google.com:19302' },
-            { url: 'stun:stun1.l.google.com:19302' },
-            { url: 'stun:stun2.l.google.com:19302' },
-            { url: 'stun:stun3.l.google.com:19302' },
-            { url: 'turn:numb.viagenie.ca', credential: 'muazkh', username: 'webrtc@live.com' },
-            { url: 'turn:relay.backups.cz', credential: 'webrtc', username: 'webrtc' },
-            { url: 'turn:relay.backups.cz?transport=tcp', credential: 'webrtc', username: 'webrtc' },
-            { url: 'turn:192.158.29.39:3478?transport=udp', credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=', username: '28224511:1379330808' },
-        ],
+        iceServers: [
+          {
+              "urls": "stun:stun.relay.metered.ca:80"
+          },
+          {
+              "urls": "turn:global.relay.metered.ca:80",
+              "username": "4746e4806424ee775cae0eb7",
+              "credential": "fWtNeHJsCEzLoTaK"
+          },
+          {
+              "urls": "turn:global.relay.metered.ca:80?transport=tcp",
+              "username": "4746e4806424ee775cae0eb7",
+              "credential": "fWtNeHJsCEzLoTaK"
+          },
+          {
+              "urls": "turn:global.relay.metered.ca:443",
+              "username": "4746e4806424ee775cae0eb7",
+              "credential": "fWtNeHJsCEzLoTaK"
+          },
+          {
+              "urls": "turns:global.relay.metered.ca:443?transport=tcp",
+              "username": "4746e4806424ee775cae0eb7",
+              "credential": "fWtNeHJsCEzLoTaK"
+          }
+      ],
       }),
-      
     []
   );
+  
   
 
   const createOffer = async()=> {

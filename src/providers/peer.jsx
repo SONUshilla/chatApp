@@ -11,16 +11,15 @@ export const PeerProvider = ({ children }) => {
     () =>
       new RTCPeerConnection({
         iceServers: [
-          { urls: "stun:stun.l.google.com:19302" }, // Google STUN for fast NAT traversal
-  
+          {urls: 'stun:stun.l.google.com:19302'},
           {
-            urls: "turn:relay1.expressturn.com:3478",
-            username: "efLJ3KCRYOU1FDA7QD",
-            credential: "ZZHlXOfsINKMXOlZ",
+            url: 'turn:numb.viagenie.ca',
+            credential: 'muazkh',
+            username: 'webrtc@live.com',
           },
         ],
       }),
-
+      
     []
   );
   

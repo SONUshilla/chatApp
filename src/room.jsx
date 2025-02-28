@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { usePeer } from "./providers/peer";
 import { useSocket } from "./providers/socket";
 import ReactPlayer from "react-player";
@@ -340,26 +340,48 @@ const handlePartnerDisconnected = useCallback(async () => {
     setMessage("");
     setShowConfirmPopup(false);
   };
-  const openConfirmPopup = () => setShowConfirmPopup(true);
-  const closeConfirmPopup = () => setShowConfirmPopup(false);
+  const allowBackRef = useRef(false);
+  const popStateHandlerRef = useRef(null);
 
   useEffect(() => {
     // Push a fake history entry when the chat starts
     window.history.pushState(null, null, window.location.pathname);
 
-    const handlePopState = (event) => {
-      if (room) {
-        setShowConfirmPopup(true); // Show confirmation popup instead of going back
-        window.history.pushState(null, null, window.location.pathname); // Prevent back navigation
+    // Define the popstate handler and store it in a ref
+    popStateHandlerRef.current = (event) => {
+      if (!allowBackRef.current && room) {
+        setShowConfirmPopup(true);
+        // Push another fake state to prevent actual back navigation
+        window.history.pushState(null, null, window.location.pathname);
       }
     };
 
-    window.addEventListener("popstate", handlePopState);
+    window.addEventListener("popstate", popStateHandlerRef.current);
 
     return () => {
-      window.removeEventListener("popstate", handlePopState);
+      window.removeEventListener("popstate", popStateHandlerRef.current);
     };
   }, [room]);
+
+  const handleConfirmYes = () => {
+    // Allow back navigation
+    allowBackRef.current = true;
+    setShowConfirmPopup(false);
+
+    // Remove the event listener to stop intercepting popstate events
+    window.removeEventListener("popstate", popStateHandlerRef.current);
+
+    // Navigate back (using go(-2) can help bypass the extra fake state)
+    window.history.go(-2);
+
+    // Optionally, call your endChat logic
+    endChat();
+  };
+
+  const handleConfirmCancel = () => {
+    setShowConfirmPopup(false);
+  };
+
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
@@ -489,13 +511,13 @@ const handlePartnerDisconnected = useCallback(async () => {
             <div className="flex justify-center gap-4">
               <button
                 className="bg-red-500 text-white px-4 py-2 rounded-md"
-                onClick={endChat}
+                onClick={handleConfirmYes}
               >
                 Yes
               </button>
               <button
                 className="bg-gray-400 text-white px-4 py-2 rounded-md"
-                onClick={closeConfirmPopup}
+                onClick={handleConfirmCancel}
               >
                 Cancel
               </button>

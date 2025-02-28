@@ -155,7 +155,6 @@ const handlePartnerDisconnected = useCallback(async () => {
 
   useEffect(() => {
     const handleTrackEvent = (event) => {
-      console.log("Received remote stream", event.streams[0]);
       setRemoteStream(event.streams[0]);
     };
 
@@ -252,7 +251,7 @@ const handlePartnerDisconnected = useCallback(async () => {
         console.error("Error creating answer:", error);
       }
     },
-    [createAnswer, sendStream, socket]
+    [createAnswer, handleNegotiation, sendStream, socket]
   );
 
   useEffect(() => {

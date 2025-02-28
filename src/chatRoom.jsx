@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSocket } from "./providers/socket";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Chat = ({}) => {
   const [status, setStatus] = useState("waiting");
@@ -29,12 +30,11 @@ const Chat = ({}) => {
       setChat((prev) => [...prev, { text: msg, isMe: false }])
     );
     socket.on("partner-disconnected", () => {
-      setChat((prev) => [
-        ...prev,
+      setChat([
         {
           text: "Partner has disconnected. Searching for new partner...",
           isSystem: true,
-        },
+        }
       ]);
     });
 
@@ -99,11 +99,17 @@ const Chat = ({}) => {
         {/* Chat Header */}
         <header className="p-4 bg-gray-800 text-white flex justify-between items-center ">
           {status === "disconnected" ? (
-            <button className="bg-green-500 px-4 py-2 rounded-md" onClick={startChat}>
+            <button
+              className="bg-green-500 px-4 py-2 rounded-md"
+              onClick={startChat}
+            >
               Start New Chat
             </button>
           ) : (
-            <button className="bg-red-500 px-4 py-2 rounded-md" onClick={openConfirmPopup}>
+            <button
+              className="bg-red-500 px-4 py-2 rounded-md"
+              onClick={openConfirmPopup}
+            >
               End Chat
             </button>
           )}
@@ -111,50 +117,95 @@ const Chat = ({}) => {
         </header>
 
         {/* Messages */}
-        <div className="flex-1 p-4 overflow-y-auto bg-gray-100">
-          {chat.map((msg, index) => (
-            <div
-              key={index}
-              className={`max-w-[70%] px-4 py-2 mb-2 rounded-lg text-sm ${
-                msg.isSystem
-                  ? "bg-gray-500 text-white mx-auto text-center"
-                  : msg.isMe
-                  ? "bg-blue-500 text-white ml-auto"
-                  : "bg-gray-300 text-black mr-auto"
-              }`}
-            >
-              {msg.text}
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, x: 100 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 100 }}
+            className="w-full bg-black/80 backdrop-blur-lg h-screen shadow-2xl border-2 border-cyan-400/30 flex flex-col"
+          >
+            <div className="p-4 border-b border-cyan-400/30">
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                Chat
+              </h2>
             </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
 
-        {/* Message Input */}
-        <form className="p-4 flex items-center border-t border-gray-300" onSubmit={handleSendMessage}>
-          <input
-            type="text"
-            placeholder="Type your message..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            className="flex-1 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            autoFocus
-          />
-          <button type="submit" className="ml-2 bg-green-500 text-white px-4 py-2 rounded-md">
-            ➤
-          </button>
-        </form>
+            <div className="flex-1 p-4 space-y-4 overflow-y-auto scrollbar-thin scrollbar-thumb-cyan-400/50 scrollbar-track-transparent">
+              {chat.map((msg, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className={`flex ${
+                    msg.isSystem
+                      ? "justify-center"
+                      : msg.isMe
+                      ? "justify-end"
+                      : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`max-w-[80%] p-3 rounded-xl ${
+                      msg.isSystem
+                        ? "bg-cyan-400/20  text-cyan-400 text-center"
+                        : msg.isMe
+                        ? "bg-purple-400/20 text-purple-200"
+                        : "bg-cyan-400/20 text-cyan-200"
+                    }`}
+                  >
+                    <p className="text-sm">{msg.text}</p>
+                    {!msg.isSystem && (
+                      <span className="text-xs opacity-50 mt-1 block">
+                        {msg.isMe ? "You" : "Stranger"}
+                      </span>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            <form
+              onSubmit={handleSendMessage}
+              className="p-4 border-t border-cyan-400/30"
+            >
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Type your message..."
+                  className="flex-1 bg-black/30 border border-cyan-400/30 rounded-lg px-4 py-2 text-cyan-200 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-400 to-purple-400 rounded-lg font-bold text-black hover:opacity-90 transition-opacity"
+                >
+                  ⚡
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Confirmation Popup */}
       {showConfirmPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded-lg shadow-lg text-center">
-            <p className="mb-4 text-gray-800">Are you sure you want to end the chat?</p>
+            <p className="mb-4 text-gray-800">
+              Are you sure you want to end the chat?
+            </p>
             <div className="flex justify-center gap-4">
-              <button className="bg-red-500 text-white px-4 py-2 rounded-md" onClick={endChat}>
+              <button
+                className="bg-red-500 text-white px-4 py-2 rounded-md"
+                onClick={endChat}
+              >
                 Yes
               </button>
-              <button className="bg-gray-400 text-white px-4 py-2 rounded-md" onClick={closeConfirmPopup}>
+              <button
+                className="bg-gray-400 text-white px-4 py-2 rounded-md"
+                onClick={closeConfirmPopup}
+              >
                 Cancel
               </button>
             </div>

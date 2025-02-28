@@ -13,7 +13,7 @@ function Room() {
   const [chat, setChat] = useState([]);
   const [message, setMessage] = useState("");
   const [room, setRoom] = useState("");
-  const [buttonText, setButtonText] = useState("Start New Chat");
+  const [buttonText, setButtonText] = useState("End Chat");
   const [status, setStatus] = useState("waiting");
   const [iceState, setIceState] = useState(null);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);

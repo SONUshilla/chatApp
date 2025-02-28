@@ -16,8 +16,8 @@ function Room() {
   const [buttonText, setButtonText] = useState("Start New Chat");
   const [status, setStatus] = useState("waiting");
   const [iceState, setIceState] = useState(null);
-  let reconnectionAttempts = 0;
-  const MAX_RETRIES = 1;
+  const [reconnectionAttempts,setReconnectionAttempts]=useState(0);
+  const MAX_RETRIES = 3;
 
   const handleRoom = useCallback(async (data) => {
     const { room } = data;
@@ -158,6 +158,7 @@ const handlePartnerDisconnected = useCallback(async () => {
   useEffect(() => {
     const handleTrackEvent = (event) => {
       console.log("Received remote stream", event.streams[0]);
+      setStatus("paired");
       setRemoteStream(event.streams[0]);
     };
 
@@ -181,11 +182,13 @@ const handlePartnerDisconnected = useCallback(async () => {
         setButtonText("End Call");
         setStatus("paired");
         sendStream();
+        setReconnectionAttempts(0);
+
       }
       else if(state==="disconnected"){
         if (reconnectionAttempts < MAX_RETRIES) {
           console.log(`Restarting ICE... Attempt ${reconnectionAttempts + 1}`);
-          reconnectionAttempts++;
+          setReconnectionAttempts(reconnectionAttempts+1);
         try {
           // Create a new offer with ICE restart enabled
           const offer = await peer.createOffer({ iceRestart: true });

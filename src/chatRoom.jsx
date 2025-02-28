@@ -24,7 +24,7 @@ const Chat = ({}) => {
   }, []);
 
   useEffect(() => {
-    socket.on("roomJoined", handleRoomJoined);
+    socket.on("chatRoomJoined", handleRoomJoined);
     socket.on("waiting", () => setStatus("waiting"));
     socket.on("message", (msg) =>
       setChat((prev) => [...prev, { text: msg, isMe: false }])
@@ -36,6 +36,7 @@ const Chat = ({}) => {
           isSystem: true,
         }
       ]);
+      socket.emit("joinChatRoom");
     });
 
     socket.on("notification", (data) => {
@@ -45,7 +46,7 @@ const Chat = ({}) => {
     });
 
     return () => {
-      socket.off("roomJoined", handleRoomJoined);
+      socket.off("chatRoomJoined", handleRoomJoined);
       socket.off("waiting");
     };
   }, [handleRoomJoined, socket]);
@@ -75,6 +76,23 @@ const Chat = ({}) => {
       setMessage("");
     }
   };
+  useEffect(() => {
+    // Push a fake history entry when the chat starts
+    window.history.pushState(null, null, window.location.pathname);
+
+    const handlePopState = (event) => {
+      if (room) {
+        setShowConfirmPopup(true); // Show confirmation popup instead of going back
+        window.history.pushState(null, null, window.location.pathname); // Prevent back navigation
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [room]);
 
   const openConfirmPopup = () => setShowConfirmPopup(true);
   const closeConfirmPopup = () => setShowConfirmPopup(false);
@@ -82,9 +100,9 @@ const Chat = ({}) => {
   if (status === "waiting") {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-100">
-        <div className="flex flex-col items-center  bg-white rounded-lg shadow-md">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className=" text-gray-700">Searching for a partner...</p>
+        <div className="flex p-8 flex-col items-center  bg-white rounded-lg shadow-md">
+          <div className="w-12 h-12  mb-2 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className=" text-gray-700 mb-4">Searching for a partner...</p>
           <button className=" bg-red-500 text-white px-4 py-2 rounded-md" onClick={endChat}>
             Cancel
           </button>
@@ -96,25 +114,7 @@ const Chat = ({}) => {
   return (
     <div className={`h-screen w-full  flex items-start justify-start p-2`}>
       <div className="w-full h-full bg-white  shadow-lg flex flex-col">
-        {/* Chat Header */}
-        <header className="p-4 bg-gray-800 text-white flex justify-between items-center ">
-          {status === "disconnected" ? (
-            <button
-              className="bg-green-500 px-4 py-2 rounded-md"
-              onClick={startChat}
-            >
-              Start New Chat
-            </button>
-          ) : (
-            <button
-              className="bg-red-500 px-4 py-2 rounded-md"
-              onClick={openConfirmPopup}
-            >
-              End Chat
-            </button>
-          )}
-          <h3 className="text-lg font-semibold">Chat</h3>
-        </header>
+      
 
         {/* Messages */}
         <AnimatePresence>
@@ -124,10 +124,25 @@ const Chat = ({}) => {
             exit={{ opacity: 0, x: 100 }}
             className="w-full bg-black/80 backdrop-blur-lg h-screen shadow-2xl border-2 border-cyan-400/30 flex flex-col"
           >
-            <div className="p-4 border-b border-cyan-400/30">
+            <div className="p-4 border-b flex justify-between border-cyan-400/30">
               <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
                 Chat
               </h2>
+              {status === "disconnected" ? (
+            <button
+              className="bg-green-500 px-4 py-2 rounded-md"
+              onClick={startChat}
+            >
+              Start New Chat
+            </button>
+          ) : (
+            <button
+              className="bg-cyan-500 px-4 py-2 rounded-md"
+              onClick={openConfirmPopup}
+            >
+              End Chat
+            </button>
+          )}
             </div>
 
             <div className="flex-1 p-4 space-y-4 overflow-y-auto scrollbar-thin scrollbar-thumb-cyan-400/50 scrollbar-track-transparent">
@@ -145,20 +160,17 @@ const Chat = ({}) => {
                   }`}
                 >
                   <div
-                    className={`max-w-[80%] p-3 rounded-xl ${
+                    className={`max-w-[80%] p-2 lg:min-w-[0] min-w-[10%] rounded-xl ${
                       msg.isSystem
                         ? "bg-cyan-400/20  text-cyan-400 text-center"
                         : msg.isMe
-                        ? "bg-purple-400/20 text-purple-200"
+                        ? "bg-purple-400/20 text-purple-200 "
                         : "bg-cyan-400/20 text-cyan-200"
                     }`}
                   >
-                    <p className="text-sm">{msg.text}</p>
-                    {!msg.isSystem && (
-                      <span className="text-xs opacity-50 mt-1 block">
-                        {msg.isMe ? "You" : "Stranger"}
-                      </span>
-                    )}
+                  
+                    <p className="text-md text-right">{msg.text}</p>
+                 
                   </div>
                 </motion.div>
               ))}
@@ -190,7 +202,7 @@ const Chat = ({}) => {
 
       {/* Confirmation Popup */}
       {showConfirmPopup && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 p-7 bg-black bg-opacity-50 flex items-center justify-center">
           <div className="bg-white p-6 rounded-lg shadow-lg text-center">
             <p className="mb-4 text-gray-800">
               Are you sure you want to end the chat?

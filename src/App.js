@@ -8,13 +8,13 @@ import Chat from "./chatRoom";
 const App = () => {
   return (
     <SocketProvider>
-      <PeerProvider>
+      
         <Routes>
           <Route path="/" element=<HomePage /> />
           <Route path="/chatRoom" element=<Chat/> />
-          <Route path="/videoRoom" element=<Room/> />
+          <Route path="/videoRoom" element=<PeerProvider><Room/></PeerProvider> />
         </Routes>
-      </PeerProvider>
+      
     </SocketProvider>
   );
 };

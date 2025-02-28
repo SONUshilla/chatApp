@@ -16,6 +16,7 @@ function Room() {
   const [buttonText, setButtonText] = useState("Start New Chat");
   const [status, setStatus] = useState("waiting");
   const [iceState, setIceState] = useState(null);
+  const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const [reconnectionAttempts,setReconnectionAttempts]=useState(0);
   const MAX_RETRIES = 3;
 
@@ -26,7 +27,7 @@ function Room() {
   useEffect(() => {
     socket.on("waiting", () => setStatus("waiting"));
     socket.on("roomJoined", handleRoom);
-    socket.on("message", (msg) =>
+    socket.on("videoMessage", (msg) =>
       setChat((prev) => [...prev, { text: msg, isMe: false }])
     );
 
@@ -44,7 +45,7 @@ function Room() {
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (message.trim() && room) {
-      socket.emit("sendMessage", { room, message });
+      socket.emit("sendVideoMessage", { room, message });
       setChat((prev) => [...prev, { text: message, isMe: true }]);
       setMessage("");
     }
@@ -331,6 +332,35 @@ const handlePartnerDisconnected = useCallback(async () => {
     }
   };
 
+  const endChat = () => {
+    socket.emit("endChat", room);
+    setStatus("disconnected");
+    setRoom("");
+    setChat([]);
+    setMessage("");
+    setShowConfirmPopup(false);
+  };
+  const openConfirmPopup = () => setShowConfirmPopup(true);
+  const closeConfirmPopup = () => setShowConfirmPopup(false);
+
+  useEffect(() => {
+    // Push a fake history entry when the chat starts
+    window.history.pushState(null, null, window.location.pathname);
+
+    const handlePopState = (event) => {
+      if (room) {
+        setShowConfirmPopup(true); // Show confirmation popup instead of going back
+        window.history.pushState(null, null, window.location.pathname); // Prevent back navigation
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [room]);
+
   return (
     <div className="h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
       <div className="flex h-full  p-4 space-x-4 relative">
@@ -449,6 +479,30 @@ const handlePartnerDisconnected = useCallback(async () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {showConfirmPopup && (
+        <div className="fixed inset-0 p-7 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+            <p className="mb-4 text-gray-800">
+              Are you sure you want to end the chat?
+            </p>
+            <div className="flex justify-center gap-4">
+              <button
+                className="bg-red-500 text-white px-4 py-2 rounded-md"
+                onClick={endChat}
+              >
+                Yes
+              </button>
+              <button
+                className="bg-gray-400 text-white px-4 py-2 rounded-md"
+                onClick={closeConfirmPopup}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* Chat Toggle Button */}
         <button

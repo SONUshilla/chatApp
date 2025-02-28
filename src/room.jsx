@@ -20,10 +20,37 @@ function Room() {
   const [reconnectionAttempts,setReconnectionAttempts]=useState(0);
   const MAX_RETRIES = 3;
 
-  const handleRoom = useCallback(async (data) => {
+  // Example: handling room update
+  const handleRoom = useCallback((data) => {
     const { room } = data;
+    console.log("room123", room);
     setRoom(room);
   }, []);
+
+  // endChat function with its dependencies
+  const endChat = useCallback(() => {
+    socket.emit("endChat", room);
+    // Additional cleanup actions:
+    // setStatus("disconnected");
+    // peer.close();
+    console.log("endChat called for room:", room);
+  }, [room, socket]);
+
+  // Create a ref to always hold the latest version of endChat
+  const endChatRef = useRef(endChat);
+  useEffect(() => {
+    endChatRef.current = endChat;
+  }, [endChat]);
+
+  // Use an effect with an empty dependency array to call endChat only on unmount
+  useEffect(() => {
+    console.log("Component mounted");
+    return () => {
+      console.log("Component unmounted (Leaving the page)");
+      endChatRef.current(); // Call the latest version of endChat
+    };
+  }, []); // empty dependency array ensures this effect runs only once
+  
   useEffect(() => {
     socket.on("waiting", () => setStatus("waiting"));
     socket.on("roomJoined", handleRoom);
@@ -137,7 +164,7 @@ function Room() {
 // Update handlePartnerDisconnected
 const handlePartnerDisconnected = useCallback(async () => {
   try {
-
+    console.log("am i running");
     if (myStream) {
       myStream.getTracks().forEach(track => track.stop());
       setMyStream(null);
@@ -332,56 +359,6 @@ const handlePartnerDisconnected = useCallback(async () => {
     }
   };
 
-  const endChat = () => {
-    socket.emit("endChat", room);
-    setStatus("disconnected");
-    setRoom("");
-    setChat([]);
-    setMessage("");
-    setShowConfirmPopup(false);
-  };
-  const allowBackRef = useRef(false);
-  const popStateHandlerRef = useRef(null);
-
-  useEffect(() => {
-    // Push a fake history entry when the chat starts
-    window.history.pushState(null, null, window.location.pathname);
-
-    // Define the popstate handler and store it in a ref
-    popStateHandlerRef.current = (event) => {
-      if (!allowBackRef.current && room) {
-        setShowConfirmPopup(true);
-        // Push another fake state to prevent actual back navigation
-        window.history.pushState(null, null, window.location.pathname);
-      }
-    };
-
-    window.addEventListener("popstate", popStateHandlerRef.current);
-
-    return () => {
-      window.removeEventListener("popstate", popStateHandlerRef.current);
-    };
-  }, [room]);
-
-  const handleConfirmYes = () => {
-    // Allow back navigation
-    allowBackRef.current = true;
-    setShowConfirmPopup(false);
-
-    // Remove the event listener to stop intercepting popstate events
-    window.removeEventListener("popstate", popStateHandlerRef.current);
-
-    // Navigate back (using go(-2) can help bypass the extra fake state)
-    window.history.go(-2);
-
-    // Optionally, call your endChat logic
-    endChat();
-  };
-
-  const handleConfirmCancel = () => {
-    setShowConfirmPopup(false);
-  };
-
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
@@ -511,13 +488,12 @@ const handlePartnerDisconnected = useCallback(async () => {
             <div className="flex justify-center gap-4">
               <button
                 className="bg-red-500 text-white px-4 py-2 rounded-md"
-                onClick={handleConfirmYes}
+                onClick={handleCallEnded}
               >
                 Yes
               </button>
               <button
                 className="bg-gray-400 text-white px-4 py-2 rounded-md"
-                onClick={handleConfirmCancel}
               >
                 Cancel
               </button>

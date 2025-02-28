@@ -187,6 +187,7 @@ const handlePartnerDisconnected = useCallback(async () => {
       }
       else if(state==="disconnected"){
         if (reconnectionAttempts < MAX_RETRIES) {
+          setButtonText("End Call");
           console.log(`Restarting ICE... Attempt ${reconnectionAttempts + 1}`);
           setReconnectionAttempts(reconnectionAttempts+1);
         try {

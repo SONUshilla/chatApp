@@ -16,6 +16,8 @@ function Room() {
   const [buttonText, setButtonText] = useState("Start New Chat");
   const [status, setStatus] = useState("waiting");
   const [iceState, setIceState] = useState(null);
+  let reconnectionAttempts = 0;
+  const MAX_RETRIES = 1;
 
   const handleRoom = useCallback(async (data) => {
     const { room } = data;
@@ -165,10 +167,11 @@ const handlePartnerDisconnected = useCallback(async () => {
       peer.removeEventListener("track", handleTrackEvent);
     };
   }, [peer]);
+ 
 
   // Replace the oniceconnectionstatechange with useEffect
   useEffect(() => {
-    const handleIceConnectionStateChange = () => {
+    const handleIceConnectionStateChange = async() => {
       const state = peer.iceConnectionState;
       console.log("ICE Connection State:", state);
       setIceState(state);
@@ -178,6 +181,27 @@ const handlePartnerDisconnected = useCallback(async () => {
         setButtonText("End Call");
         setStatus("paired");
         sendStream();
+      }
+      else if(state==="disconnected"){
+        if (reconnectionAttempts < MAX_RETRIES) {
+          console.log(`Restarting ICE... Attempt ${reconnectionAttempts + 1}`);
+          reconnectionAttempts++;
+        try {
+          // Create a new offer with ICE restart enabled
+          const offer = await peer.createOffer({ iceRestart: true });
+          await peer.setLocalDescription(offer);
+          socket.emit("nego-call-user", { id: remoteId, offer });
+        } catch (error) {
+          console.error("Error restarting ICE:", error);
+        }
+      }
+      else{
+        socket.emit("endChat", room);
+        peer.close();
+        setRemoteStream(null);
+        setRemoteId(null);
+        socket.emit("joinVideoRoom");
+      }
       } else if (state === "failed") {
         console.log("ICE connection failed, restarting...");
         socket.emit("joinVideoRoom");
@@ -208,7 +232,7 @@ const handlePartnerDisconnected = useCallback(async () => {
         handleIceConnectionStateChange
       );
     };
-  }, [peer, sendStream, socket, myStream]);
+  }, [peer, sendStream, socket, myStream, remoteId, reconnectionAttempts, room]);
 
   const handleNegotiation = useCallback(async () => {
     try {
@@ -252,7 +276,7 @@ const handlePartnerDisconnected = useCallback(async () => {
         console.error("Error creating answer:", error);
       }
     },
-    [createAnswer, sendStream, socket]
+    [createAnswer, handleNegotiation, sendStream, socket]
   );
 
   useEffect(() => {

@@ -1,8 +1,10 @@
-import React, { createContext, useEffect, useState, useContext } from "react";
+import React, { createContext, useEffect, useRef, useContext } from "react";
 
 // ICE Configuration
 const ICE_CONFIG = {
   iceServers: [
+    
+    { urls: "stun:stun.relay.metered.ca:80" },
     {
       urls: "turn:global.relay.metered.ca:80",
       username: "4746e4806424ee775cae0eb7",
@@ -26,82 +28,75 @@ const ICE_CONFIG = {
   ],
 };
 
+
 const PeerContext = createContext(null);
 export const usePeer = () => useContext(PeerContext);
 
 export const PeerProvider = ({ children }) => {
-  const [isNegotiating, setIsNegotiating] = useState(false);
-  const [peer, setPeer] = useState(() => new RTCPeerConnection(ICE_CONFIG));
+  const peerRef = useRef(new RTCPeerConnection(ICE_CONFIG));
+  const isNegotiatingRef = useRef(false);
 
-  // Function to reinitialize Peer Connection properly
   const reinitializePeer = () => {
-    console.warn("Reinitializing Peer Connection...");
+    peerRef.current.close();
     const newPeer = new RTCPeerConnection(ICE_CONFIG);
-    setPeer(newPeer); // Ensure `peer` state is updated
+    setupPeerEvents(newPeer);
+    peerRef.current = newPeer;
     return newPeer;
   };
 
+  const setupPeerEvents = (peer) => {
+    peer.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log("ICE Candidate:", event.candidate);
+      }
+    };
+  };
+
+  useEffect(() => {
+    setupPeerEvents(peerRef.current);
+    return () => peerRef.current.close();
+  }, []);
+
   const createOffer = async () => {
     try {
-      if (isNegotiating) {
-        console.warn("Already negotiating, skipping new offer.");
-        return;
-      }
+      if (isNegotiatingRef.current) return;
+      isNegotiatingRef.current = true;
 
-      let currentPeer = peer;
-      if (peer.signalingState === "closed") {
-        console.warn(`Peer closed, reinitializing...`);
+      let currentPeer = peerRef.current;
+      if (currentPeer.signalingState === "closed") {
         currentPeer = reinitializePeer();
       }
 
-      setIsNegotiating(true);
       const offer = await currentPeer.createOffer();
       await currentPeer.setLocalDescription(offer);
-      console.log("Offer created:", offer);
       return offer;
-    } catch (error) {
-      console.error("Error creating offer:", error);
     } finally {
-      setIsNegotiating(false);
+      isNegotiatingRef.current = false;
     }
   };
 
   const createAnswer = async (offer) => {
     try {
-      if (isNegotiating) {
-        console.warn("Already negotiating, skipping answer creation.");
-        return;
-      }
+      if (isNegotiatingRef.current) return;
+      isNegotiatingRef.current = true;
 
-      let currentPeer = peer;
-      if (peer.signalingState === "closed") {
-        console.warn(`Peer closed, reinitializing...`);
+      let currentPeer = peerRef.current;
+      if (currentPeer.signalingState === "closed") {
         currentPeer = reinitializePeer();
       }
 
-      setIsNegotiating(true);
       await currentPeer.setRemoteDescription(offer);
       const answer = await currentPeer.createAnswer();
       await currentPeer.setLocalDescription(answer);
       return answer;
-    } catch (error) {
-      console.error("Error creating answer:", error);
     } finally {
-      setIsNegotiating(false);
+      isNegotiatingRef.current = false;
     }
   };
 
   const setRemoteAns = async (ans) => {
     try {
-      if (peer.signalingState !== "have-local-offer") {
-        console.warn(
-          `Peer not in expected state (have-local-offer), current state: ${peer.signalingState}`
-        );
-        return;
-      }
-      if (ans) {
-        await peer.setRemoteDescription(ans);
-      }
+      await peerRef.current.setRemoteDescription(ans);
     } catch (error) {
       console.error("Error setting remote description:", error);
     }
@@ -109,11 +104,14 @@ export const PeerProvider = ({ children }) => {
 
   return (
     <PeerContext.Provider
-      value={{ peer, createOffer, createAnswer, setRemoteAns }}
+      value={{
+        peer: peerRef.current,
+        createOffer,
+        createAnswer,
+        setRemoteAns
+      }}
     >
       {children}
     </PeerContext.Provider>
   );
 };
-
-export default PeerProvider;

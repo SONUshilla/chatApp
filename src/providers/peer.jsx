@@ -3,6 +3,7 @@ import React, { createContext, useEffect, useState, useContext } from "react";
 // ICE Configuration
 const ICE_CONFIG = {
   iceServers: [
+    
     { urls: "stun:stun.relay.metered.ca:80" },
     {
       urls: "turn:global.relay.metered.ca:80",
@@ -34,34 +35,28 @@ export const PeerProvider = ({ children }) => {
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [peer, setPeer] = useState(() => new RTCPeerConnection(ICE_CONFIG));
 
-  // Function to reinitialize the Peer Connection by closing the current one
+  // Function to reinitialize Peer Connection properly
   const reinitializePeer = () => {
     console.warn("Reinitializing Peer Connection...");
-    if (peer) {
-      peer.close();
-    }
     const newPeer = new RTCPeerConnection(ICE_CONFIG);
-    setPeer(newPeer);
+    setupPeerEvents(newPeer);
+    setPeer(newPeer); // Ensure `peer` state is updated
+
     return newPeer;
   };
 
-  // Helper to wait until ICE gathering is complete
-  const waitForIceCandidates = async (currentPeer) => {
-    return new Promise((resolve) => {
-      if (currentPeer.iceGatheringState === "complete") {
-        resolve();
-      } else {
-        // Preserve any existing handler if needed.
-        currentPeer.onicegatheringstatechange = () => {
-          if (currentPeer.iceGatheringState === "complete") {
-            currentPeer.onicegatheringstatechange = null;
-            resolve();
-          }
-        };
+  const setupPeerEvents = (peer) => {
+    peer.onicecandidate = (event) => {
+      if (event.candidate) {
+        console.log("ICE Candidate:", event.candidate);
       }
-    });
+    };
   };
 
+  useEffect(() => {
+    setupPeerEvents(peer);
+    return () => peer.close();
+  }, [peer]);
   const createOffer = async () => {
     try {
       if (isNegotiating) {
@@ -71,7 +66,7 @@ export const PeerProvider = ({ children }) => {
 
       let currentPeer = peer;
       if (peer.signalingState === "closed") {
-        console.warn("Peer closed, reinitializing...");
+        console.warn(`Peer closed, reinitializing...`);
         currentPeer = reinitializePeer();
       }
 
@@ -79,12 +74,7 @@ export const PeerProvider = ({ children }) => {
       const offer = await currentPeer.createOffer();
       await currentPeer.setLocalDescription(offer);
       console.log("Offer created:", offer);
-
-      // Wait for ICE candidates to be gathered
-      await waitForIceCandidates(currentPeer);
-      console.log("Final Offer with ICE candidates:", currentPeer.localDescription);
-
-      return currentPeer.localDescription;
+      return offer;
     } catch (error) {
       console.error("Error creating offer:", error);
     } finally {
@@ -101,7 +91,7 @@ export const PeerProvider = ({ children }) => {
 
       let currentPeer = peer;
       if (peer.signalingState === "closed") {
-        console.warn("Peer closed, reinitializing...");
+        console.warn(`Peer closed, reinitializing...`);
         currentPeer = reinitializePeer();
       }
 
@@ -109,13 +99,7 @@ export const PeerProvider = ({ children }) => {
       await currentPeer.setRemoteDescription(offer);
       const answer = await currentPeer.createAnswer();
       await currentPeer.setLocalDescription(answer);
-      console.log("Answer created:", answer);
-
-      // Wait for ICE candidates to be gathered
-      await waitForIceCandidates(currentPeer);
-      console.log("Final Answer with ICE candidates:", currentPeer.localDescription);
-
-      return currentPeer.localDescription;
+      return answer;
     } catch (error) {
       console.error("Error creating answer:", error);
     } finally {
@@ -132,23 +116,6 @@ export const PeerProvider = ({ children }) => {
       console.error("Error setting remote description:", error);
     }
   };
-
-  // Attach ICE candidate logging whenever the peer changes.
-  useEffect(() => {
-    if (!peer) return;
-
-    const handleIceCandidate = (event) => {
-      if (event.candidate) {
-        console.log("ICE Candidate:", event.candidate);
-      }
-    };
-
-    peer.onicecandidate = handleIceCandidate;
-
-    return () => {
-      peer.onicecandidate = null;
-    };
-  }, [peer]);
 
   return (
     <PeerContext.Provider

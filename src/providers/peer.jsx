@@ -43,11 +43,6 @@ export const PeerProvider = ({ children }) => {
     return newPeer;
   };
 
-  useEffect(() => {
-    if (peer.signalingState === "closed") {
-      reinitializePeer();
-    }
-  }, [peer.signalingState]);
 
   const createOffer = async () => {
     try {

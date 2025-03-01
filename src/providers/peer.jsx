@@ -3,8 +3,6 @@ import React, { createContext, useEffect, useState, useContext } from "react";
 // ICE Configuration
 const ICE_CONFIG = {
   iceServers: [
-    
-    { urls: "stun:stun.relay.metered.ca:80" },
     {
       urls: "turn:global.relay.metered.ca:80",
       username: "4746e4806424ee775cae0eb7",
@@ -42,7 +40,6 @@ export const PeerProvider = ({ children }) => {
     setPeer(newPeer); // Ensure `peer` state is updated
     return newPeer;
   };
-
 
   const createOffer = async () => {
     try {

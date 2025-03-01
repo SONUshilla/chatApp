@@ -1,9 +1,18 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useSocket } from "./providers/socket";
+import { useEffect, useState } from "react";
 
-const HomePage = () => {
+const HomePage = ({homeRoom}) => {
   const navigate = useNavigate();
   const { socket } = useSocket();
+
+
+  const location = useLocation();
+  useEffect(() => {
+   
+    socket.emit("endChat", homeRoom);
+
+  }, [homeRoom, location.pathname, socket]); // Runs when the pathname changes
 
   const handleJoinChatRoom = () => {
     socket.emit("joinChatRoom");

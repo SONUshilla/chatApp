@@ -3,7 +3,7 @@ import { usePeer } from "./providers/peer";
 import { useSocket } from "./providers/socket";
 import ReactPlayer from "react-player";
 import { motion, AnimatePresence } from "framer-motion";
-function Room() {
+function Room({setHomeRoom}) {
   const { socket } = useSocket();
   const [remoteStream, setRemoteStream] = useState(null);
   const [remoteId, setRemoteId] = useState(null);
@@ -20,36 +20,14 @@ function Room() {
   const [reconnectionAttempts,setReconnectionAttempts]=useState(0);
   const MAX_RETRIES = 3;
 
-  // Example: handling room update
-  const handleRoom = useCallback((data) => {
+  const handleRoom = useCallback(async (data) => {
     const { room } = data;
-    console.log("room123", room);
+    setHomeRoom(room);
     setRoom(room);
-  }, []);
+  }, [setHomeRoom]);
 
-  // endChat function with its dependencies
-  const endChat = useCallback(() => {
-    socket.emit("endChat", room);
-    // Additional cleanup actions:
-    // setStatus("disconnected");
-    // peer.close();
-    console.log("endChat called for room:", room);
-  }, [room, socket]);
+  
 
-  // Create a ref to always hold the latest version of endChat
-  const endChatRef = useRef(endChat);
-  useEffect(() => {
-    endChatRef.current = endChat;
-  }, [endChat]);
-
-  // Use an effect with an empty dependency array to call endChat only on unmount
-  useEffect(() => {
-    console.log("Component mounted");
-    return () => {
-      console.log("Component unmounted (Leaving the page)");
-      endChatRef.current(); // Call the latest version of endChat
-    };
-  }, []); // empty dependency array ensures this effect runs only once
   
   useEffect(() => {
     socket.on("waiting", () => setStatus("waiting"));
@@ -352,6 +330,7 @@ const handlePartnerDisconnected = useCallback(async () => {
       setRemoteStream(null);
       setRemoteId(null);
     } else {
+      setButtonText("End Call");
       setRemoteStream(null);
       setRemoteId(null);
       socket.emit("joinVideoRoom");
@@ -525,11 +504,7 @@ const handlePartnerDisconnected = useCallback(async () => {
         </button>
       </div>
       <div className="absolute flex bottom-5 w-full justify-center text-white px-1 py-2 rounded">
-        {status === "waiting" ? (
-          <div className="bg-blue-500 p-4 rounded-lg">
-            <span>Searching</span>
-          </div>
-        ) : (
+    
           <button
             onClick={handleCallEnded}
             className={`${
@@ -538,7 +513,6 @@ const handlePartnerDisconnected = useCallback(async () => {
           >
             <span>{buttonText}</span>
           </button>
-        )}
       </div>
     </div>
   );

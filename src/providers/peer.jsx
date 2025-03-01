@@ -1,4 +1,6 @@
-import React, { createContext, useEffect, useState, useContext } from "react";
+import React, { createContext, useEffect, useState, useContext, useCallback } from "react";
+import { useSocket } from "./socket";
+
 
 // ICE Configuration
 const ICE_CONFIG = {
@@ -31,49 +33,57 @@ const ICE_CONFIG = {
 const PeerContext = createContext(null);
 export const usePeer = () => useContext(PeerContext);
 
-export const PeerProvider = ({ children }) => {
+export const PeerProvider = ({ children,room }) => {
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [peer, setPeer] = useState(() => new RTCPeerConnection(ICE_CONFIG));
+  const { socket } = useSocket();
 
-  // Function to reinitialize Peer Connection properly
-  const reinitializePeer = () => {
-    console.warn("Reinitializing Peer Connection...");
-    const newPeer = new RTCPeerConnection(ICE_CONFIG);
-    setupPeerEvents(newPeer);
-    setPeer(newPeer); // Ensure `peer` state is updated
+  const sendCandidate = useCallback((candidate) => {
+    socket.emit("ice-candidate",{ room,candidate});
+  },[room, socket]);
+  
 
-    return newPeer;
-  };
+  // Listen for ICE Candidates from the server
+  useEffect(() => {
+    socket.on("ice-candidate", (candidate) => {
+      console.log("Received ICE Candidate:", candidate);
+      peer.addIceCandidate(new RTCIceCandidate(candidate));
+    });
 
-  const setupPeerEvents = (peer) => {
+    return () => socket.off("ice-candidate");
+  }, [peer, socket]);
+
+  const setupPeerEvents = (peer, sendCandidate) => {
     peer.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("ICE Candidate:", event.candidate);
+        sendCandidate(event.candidate); // Send ICE candidate to signaling server
       }
     };
   };
 
+  const reinitializePeer = () => {
+    console.warn("Reinitializing Peer Connection...");
+    const newPeer = new RTCPeerConnection(ICE_CONFIG);
+    setupPeerEvents(newPeer, sendCandidate);
+    setPeer(newPeer);
+    return newPeer;
+  };
+
   useEffect(() => {
-    setupPeerEvents(peer);
+    setupPeerEvents(peer, sendCandidate);
     return () => peer.close();
-  }, [peer]);
+  }, [peer, sendCandidate]);
+
   const createOffer = async () => {
     try {
-      if (isNegotiating) {
-        console.warn("Already negotiating, skipping new offer.");
-        return;
-      }
-
+      if (isNegotiating) return;
       let currentPeer = peer;
-      if (peer.signalingState === "closed") {
-        console.warn(`Peer closed, reinitializing...`);
-        currentPeer = reinitializePeer();
-      }
+      if (peer.signalingState === "closed") currentPeer = reinitializePeer();
 
       setIsNegotiating(true);
       const offer = await currentPeer.createOffer();
       await currentPeer.setLocalDescription(offer);
-      console.log("Offer created:", offer);
       return offer;
     } catch (error) {
       console.error("Error creating offer:", error);
@@ -84,16 +94,9 @@ export const PeerProvider = ({ children }) => {
 
   const createAnswer = async (offer) => {
     try {
-      if (isNegotiating) {
-        console.warn("Already negotiating, skipping answer creation.");
-        return;
-      }
-
+      if (isNegotiating) return;
       let currentPeer = peer;
-      if (peer.signalingState === "closed") {
-        console.warn(`Peer closed, reinitializing...`);
-        currentPeer = reinitializePeer();
-      }
+      if (peer.signalingState === "closed") currentPeer = reinitializePeer();
 
       setIsNegotiating(true);
       await currentPeer.setRemoteDescription(offer);
@@ -109,21 +112,20 @@ export const PeerProvider = ({ children }) => {
 
   const setRemoteAns = async (ans) => {
     try {
-      if (ans) {
-        await peer.setRemoteDescription(ans);
-      }
+      if (ans) await peer.setRemoteDescription(ans);
     } catch (error) {
       console.error("Error setting remote description:", error);
     }
   };
 
+
+
   return (
-    <PeerContext.Provider
-      value={{ peer, createOffer, createAnswer, setRemoteAns }}
-    >
+    <PeerContext.Provider value={{ peer, createOffer, createAnswer, setRemoteAns }}>
       {children}
     </PeerContext.Provider>
   );
 };
+
 
 export default PeerProvider;

@@ -3,7 +3,7 @@ import { usePeer } from "./providers/peer";
 import { useSocket } from "./providers/socket";
 import ReactPlayer from "react-player";
 import { motion, AnimatePresence } from "framer-motion";
-function Room({setHomeRoom}) {
+function Room({ setHomeRoom }) {
   const { socket } = useSocket();
   const [remoteStream, setRemoteStream] = useState(null);
   const [remoteId, setRemoteId] = useState(null);
@@ -17,18 +17,41 @@ function Room({setHomeRoom}) {
   const [status, setStatus] = useState("waiting");
   const [iceState, setIceState] = useState(null);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
-  const [reconnectionAttempts,setReconnectionAttempts]=useState(0);
+  const [reconnectionAttempts, setReconnectionAttempts] = useState(0);
   const MAX_RETRIES = 3;
+  const [visible, setVisible] = useState(true);
 
-  const handleRoom = useCallback(async (data) => {
-    const { room } = data;
-    setHomeRoom(room);
-    setRoom(room);
-  }, [setHomeRoom]);
+  useEffect(() => {
+    let timer;
+    const resetTimer = () => {
+      setVisible(true);
+      clearTimeout(timer);
+      timer = setTimeout(() => setVisible(false), 3000); // Hide after 3 seconds of inactivity
+    };
 
-  
+    // Listen for user interactions
+    window.addEventListener("mousemove", resetTimer);
+    window.addEventListener("click", resetTimer);
 
-  
+    // Start the timer on mount
+    timer = setTimeout(() => setVisible(false), 3000);
+
+    return () => {
+      window.removeEventListener("mousemove", resetTimer);
+      window.removeEventListener("click", resetTimer);
+      clearTimeout(timer);
+    };
+  }, []);
+
+  const handleRoom = useCallback(
+    async (data) => {
+      const { room } = data;
+      setHomeRoom(room);
+      setRoom(room);
+    },
+    [setHomeRoom]
+  );
+
   useEffect(() => {
     socket.on("waiting", () => setStatus("waiting"));
     socket.on("roomJoined", handleRoom);
@@ -125,7 +148,6 @@ function Room({setHomeRoom}) {
     [sendStream, setRemoteAns]
   );
 
-
   const handleNegoCallAccepted = useCallback(
     async (data) => {
       const { ans } = data;
@@ -139,27 +161,30 @@ function Room({setHomeRoom}) {
     },
     [sendStream, setRemoteAns]
   );
-// Update handlePartnerDisconnected
-const handlePartnerDisconnected = useCallback(async () => {
-  try {
-    console.log("am i running");
-    if (myStream) {
-      myStream.getTracks().forEach(track => track.stop());
-      setMyStream(null);
+  // Update handlePartnerDisconnected
+  const handlePartnerDisconnected = useCallback(async () => {
+    try {
+      console.log("am i running");
+      if (myStream) {
+        myStream.getTracks().forEach((track) => track.stop());
+        setMyStream(null);
+      }
+      setChat((prev) => [
+        ...prev,
+        {
+          text: "Partner disconnected. Searching...",
+          isSystem: true,
+        },
+      ]);
+      setRemoteStream(null);
+      setRemoteId(null);
+      peer.close();
+      socket.emit("joinVideoRoom");
+      setStatus("waiting");
+    } catch (error) {
+      console.error("Error handling disconnect:", error);
     }
-    setChat(prev => [...prev, { 
-      text: "Partner disconnected. Searching...", 
-      isSystem: true 
-    }]);
-    setRemoteStream(null);
-    setRemoteId(null);
-    peer.close();
-    socket.emit("joinVideoRoom");
-    setStatus("waiting");
-  } catch (error) {
-    console.error("Error handling disconnect:", error);
-  }
-}, [myStream, peer, socket]);
+  }, [myStream, peer, socket]);
 
   useEffect(() => {
     const handleTrackEvent = (event) => {
@@ -174,11 +199,10 @@ const handlePartnerDisconnected = useCallback(async () => {
       peer.removeEventListener("track", handleTrackEvent);
     };
   }, [peer]);
- 
 
   // Replace the oniceconnectionstatechange with useEffect
   useEffect(() => {
-    const handleIceConnectionStateChange = async() => {
+    const handleIceConnectionStateChange = async () => {
       const state = peer.iceConnectionState;
       console.log("ICE Connection State:", state);
       setIceState(state);
@@ -189,29 +213,26 @@ const handlePartnerDisconnected = useCallback(async () => {
         setStatus("paired");
         sendStream();
         setReconnectionAttempts(0);
-
-      }
-      else if(state==="disconnected"){
+      } else if (state === "disconnected") {
         if (reconnectionAttempts < MAX_RETRIES) {
           setButtonText("End Call");
           console.log(`Restarting ICE... Attempt ${reconnectionAttempts + 1}`);
-          setReconnectionAttempts(reconnectionAttempts+1);
-        try {
-          // Create a new offer with ICE restart enabled
-          const offer = await peer.createOffer({ iceRestart: true });
-          await peer.setLocalDescription(offer);
-          socket.emit("nego-call-user", { id: remoteId, offer });
-        } catch (error) {
-          console.error("Error restarting ICE:", error);
+          setReconnectionAttempts(reconnectionAttempts + 1);
+          try {
+            // Create a new offer with ICE restart enabled
+            const offer = await peer.createOffer({ iceRestart: true });
+            await peer.setLocalDescription(offer);
+            socket.emit("nego-call-user", { id: remoteId, offer });
+          } catch (error) {
+            console.error("Error restarting ICE:", error);
+          }
+        } else {
+          socket.emit("endChat", room);
+          peer.close();
+          setRemoteStream(null);
+          setRemoteId(null);
+          socket.emit("joinVideoRoom");
         }
-      }
-      else{
-        socket.emit("endChat", room);
-        peer.close();
-        setRemoteStream(null);
-        setRemoteId(null);
-        socket.emit("joinVideoRoom");
-      }
       } else if (state === "failed") {
         console.log("ICE connection failed, restarting...");
         socket.emit("joinVideoRoom");
@@ -242,7 +263,15 @@ const handlePartnerDisconnected = useCallback(async () => {
         handleIceConnectionStateChange
       );
     };
-  }, [peer, sendStream, socket, myStream, remoteId, reconnectionAttempts, room]);
+  }, [
+    peer,
+    sendStream,
+    socket,
+    myStream,
+    remoteId,
+    reconnectionAttempts,
+    room,
+  ]);
 
   const handleNegotiation = useCallback(async () => {
     try {
@@ -257,10 +286,8 @@ const handlePartnerDisconnected = useCallback(async () => {
       console.error("Error during negotiation:", error);
     }
   }, [remoteId, createOffer, socket]);
-  
-  
-  useEffect(() => {
 
+  useEffect(() => {
     peer.addEventListener("negotiationneeded", handleNegotiation);
 
     return () => {
@@ -270,12 +297,10 @@ const handlePartnerDisconnected = useCallback(async () => {
 
   const handleNegoIncomingCall = useCallback(
     async (data) => {
-  
       const { id, offer } = data;
-      if(!offer)
-        {
-          handleNegotiation();
-        }
+      if (!offer) {
+        handleNegotiation();
+      }
       console.log("Nego Incoming call from:", id);
       try {
         console.log(offer);
@@ -315,14 +340,14 @@ const handlePartnerDisconnected = useCallback(async () => {
     handlePartnerDisconnected,
   ]);
 
-   // Update handleCallEnded to stop tracks and reset state
-   const handleCallEnded = () => {
+  // Update handleCallEnded to stop tracks and reset state
+  const handleCallEnded = () => {
     if (buttonText === "End Call") {
       setButtonText("really");
     } else if (buttonText === "really") {
       setButtonText("Start New Chat");
       if (myStream) {
-        myStream.getTracks().forEach(track => track.stop());
+        myStream.getTracks().forEach((track) => track.stop());
         setMyStream(null);
       }
       socket.emit("endChat", room);
@@ -337,7 +362,6 @@ const handlePartnerDisconnected = useCallback(async () => {
       setStatus("waiting");
     }
   };
-
 
   return (
     <div className="h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
@@ -459,27 +483,25 @@ const handlePartnerDisconnected = useCallback(async () => {
         </AnimatePresence>
 
         {showConfirmPopup && (
-        <div className="fixed inset-0 p-7 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded-lg shadow-lg text-center">
-            <p className="mb-4 text-gray-800">
-              Are you sure you want to end the chat?
-            </p>
-            <div className="flex justify-center gap-4">
-              <button
-                className="bg-red-500 text-white px-4 py-2 rounded-md"
-                onClick={handleCallEnded}
-              >
-                Yes
-              </button>
-              <button
-                className="bg-gray-400 text-white px-4 py-2 rounded-md"
-              >
-                Cancel
-              </button>
+          <div className="fixed inset-0 p-7 bg-black bg-opacity-50 flex items-center justify-center">
+            <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+              <p className="mb-4 text-gray-800">
+                Are you sure you want to end the chat?
+              </p>
+              <div className="flex justify-center gap-4">
+                <button
+                  className="bg-red-500 text-white px-4 py-2 rounded-md"
+                  onClick={handleCallEnded}
+                >
+                  Yes
+                </button>
+                <button className="bg-gray-400 text-white px-4 py-2 rounded-md">
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
         {/* Chat Toggle Button */}
         <button
@@ -503,16 +525,21 @@ const handlePartnerDisconnected = useCallback(async () => {
           </svg>
         </button>
       </div>
-      <div className="absolute flex bottom-5 w-full justify-center text-white px-1 py-2 rounded">
-    
-          <button
-            onClick={handleCallEnded}
-            className={`${
-              buttonText === "Start New Chat" ? "bg-green-600" : "bg-red-700"
-            } p-4 rounded-lg`}
-          >
-            <span>{buttonText}</span>
-          </button>
+      <div
+        className={`absolute flex bottom-5 w-full justify-center text-white px-1 py-2 rounded transition-all duration-300 ${
+          visible || buttonText === "Start New Chat"
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
+        }`}
+      >
+        <button
+          onClick={handleCallEnded}
+          className={`${
+            buttonText === "Start New Chat" ? "bg-green-600" : "bg-red-700"
+          } p-4 rounded-lg`}
+        >
+          <span>{buttonText}</span>
+        </button>
       </div>
     </div>
   );

@@ -5,6 +5,18 @@ import { useEffect, useState } from "react";
 const HomePage = ({homeRoom}) => {
   const navigate = useNavigate();
   const { socket } = useSocket();
+  const [totalUsers, setTotalUsers] = useState(0);
+
+  useEffect(() => {
+    // Listen for the total users update
+    socket.on("updateTotalUsers", (count) => {
+      setTotalUsers(count);
+    });
+
+    return () => {
+      socket.off("updateTotalUsers");
+    };
+  }, [socket]);
 
 
   const location = useLocation();
@@ -26,6 +38,11 @@ const HomePage = ({homeRoom}) => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+         {/* Floating online users count */}
+         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-black/60 p-3 rounded-full border-4 border-green-500 text-green-500 font-bold shadow-lg animate-pulse">
+  Online Users: {totalUsers}
+</div>
+
       <h1 className="text-4xl font-bold mb-8">Welcome</h1>
       <p className="text-lg mb-4">Join a random Chat or Video room:</p>
       <div className="flex gap-4">

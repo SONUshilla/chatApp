@@ -10,7 +10,7 @@ function Room({ setHomeRoom }) {
   const { socket } = useSocket();
   const [remoteStream, setRemoteStream] = useState(null);
   const [remoteId, setRemoteId] = useState(null);
-  const { createOffer, createAnswer, setRemoteAns, peer, addTrack, resetPeer } = usePeer();
+  const { createOffer, createAnswer, setRemoteAns, peer, addTrack, resetPeer, debugInfo } = usePeer();
   const [myStream, setMyStream] = useState(null);
   const [showChat, setShowChat] = useState(false);
   const [chat, setChat] = useState([]);
@@ -664,6 +664,14 @@ function Room({ setHomeRoom }) {
           </button>
         </div>
       )}
+
+      {/* DEBUG OVERLAY */}
+      <div className="absolute top-0 left-0 bg-black/60 text-green-400 p-2 text-[10px] font-mono pointer-events-none z-50 overflow-hidden max-h-40">
+        <div>p: {status}</div>
+        <div>ice: {debugInfo?.iceState}</div>
+        <div>gather: {debugInfo?.gatheringState}</div>
+        <div>loc: {debugInfo?.localCandidates?.join(', ') || 'none'}</div>
+      </div>
     </div>
   );
 }

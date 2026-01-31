@@ -38,6 +38,7 @@ export const usePeer = () => useContext(PeerContext);
 export const PeerProvider = ({ children,room }) => {
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [peerState, setPeerState] = useState(null); // Just for causing re-renders if needed
+  const [debugInfo, setDebugInfo] = useState({ iceState: 'new', gatheringState: 'new', localCandidates: [], remoteCandidates: [] });
   const peerRef = useRef(null);
   const iceCandidatesQueue = useRef([]);
   const { socket } = useSocket();
@@ -91,8 +92,18 @@ export const PeerProvider = ({ children,room }) => {
     peer.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("ICE Candidate:", event.candidate);
+        setDebugInfo(prev => ({
+            ...prev,
+            localCandidates: [...prev.localCandidates, event.candidate.type]
+        }));
         sendCandidate(event.candidate); 
       }
+    };
+    peer.oniceconnectionstatechange = () => {
+        setDebugInfo(prev => ({ ...prev, iceState: peer.iceConnectionState }));
+    };
+    peer.onicegatheringstatechange = () => {
+        setDebugInfo(prev => ({ ...prev, gatheringState: peer.iceGatheringState }));
     };
   };
 
@@ -204,7 +215,7 @@ export const PeerProvider = ({ children,room }) => {
   };
 
   return (
-    <PeerContext.Provider value={{ peer: peerState || peerRef.current, createOffer, createAnswer, setRemoteAns, addTrack, resetPeer }}>
+    <PeerContext.Provider value={{ peer: peerState || peerRef.current, createOffer, createAnswer, setRemoteAns, addTrack, resetPeer, debugInfo }}>
       {children}
     </PeerContext.Provider>
   );

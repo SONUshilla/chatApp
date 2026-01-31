@@ -78,6 +78,13 @@ export const PeerProvider = ({ children,room }) => {
       return peerRef.current;
   }, []);
 
+  const roomRef = useRef(room);
+
+  // Keep roomRef updated
+  useEffect(() => {
+    roomRef.current = room;
+  }, [room]);
+
   const setupPeerEvents = (peer, sendCandidate) => {
     peer.onicecandidate = (event) => {
       if (event.candidate) {
@@ -88,8 +95,13 @@ export const PeerProvider = ({ children,room }) => {
   };
 
   const sendCandidate = useCallback((candidate) => {
-    socket.emit("ice-candidate",{ room,candidate});
-  },[room, socket]);
+    // Navigate safely: use the ref to get the current room
+    if (roomRef.current) {
+        socket.emit("ice-candidate",{ room: roomRef.current, candidate});
+    } else {
+        console.warn("Attempted to send ICE candidate with no room ID");
+    }
+  }, [socket]);
   
   const processIceQueue = async (currentPeer) => {
     while (iceCandidatesQueue.current.length > 0) {

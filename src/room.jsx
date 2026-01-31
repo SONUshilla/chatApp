@@ -323,19 +323,16 @@ function Room({ setHomeRoom }) {
     };
   }, [peer, sendStream, socket, remoteId, reconnectionAttempts, confirmEndCall]);
 
+  /* 
+  // Disable automatic negotiation to prevents "InvalidAccessError" (Glare) during initial setup.
+  // We handle the initial offer manually in handleRoomJoined.
+  // We handle ICE restarts manually in handleIceConnectionStateChange.
+  
   const handleNegotiation = useCallback(async () => {
-    if (!peer) return; // Guard
+    if (!peer) return; 
     try {
-      if (!remoteId) {
-        console.log("Remote ID not set, skipping negotiation.");
-        return;
-      }
-      // Critical Check: Don't negotiate if we are already in the middle of a handshake (e.g. initial call)
-      // This prevents the "stuck at creating offer" bug caused by addTrack triggering this event prematurely.
-      if (peer.signalingState !== "stable") {
-         console.log("Signaling state not stable, skipping auto-negotiation.");
-         return;
-      }
+      if (!remoteId) return;
+      if (peer.signalingState !== "stable") return;
 
       console.log("Negotiation needed, creating offer...");
       const offer = await createOffer();
@@ -346,12 +343,12 @@ function Room({ setHomeRoom }) {
   }, [remoteId, createOffer, socket, peer]);
 
   useEffect(() => {
-    if (!peer) return; // Guard
-    peer.addEventListener("negotiationneeded", handleNegotiation);
+    // peer.addEventListener("negotiationneeded", handleNegotiation);
     return () => {
-      peer.removeEventListener("negotiationneeded", handleNegotiation);
+      // peer.removeEventListener("negotiationneeded", handleNegotiation);
     };
-  }, [peer, createOffer, socket, remoteId, handleNegotiation]);
+  }, [peer, handleNegotiation]);
+  */
 
   const handleNegoIncomingCall = useCallback(
     async (data) => {

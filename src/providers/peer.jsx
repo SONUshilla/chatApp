@@ -9,26 +9,19 @@ const ICE_CONFIG = {
     { urls: "stun:stun.relay.metered.ca:80" },
     { urls: "stun:stun.l.google.com:19302" }, 
     { urls: "stun:stun1.l.google.com:19302" },
+    /* 
+     * IMPORTANT: Mobile Data (4G/5G) often requires a TURN server.
+     * The free/public ones below are likely expired or dead.
+     * To fix "No Video on Mobile", sign up for free at https://www.metered.ca/ 
+     * and paste your configuration below:
+     */
+    /*
     {
       urls: "turn:global.relay.metered.ca:80",
-      username: "4746e4806424ee775cae0eb7",
-      credential: "fWtNeHJsCEzLoTaK",
+      username: "YOUR_METERED_USERNAME",
+      credential: "YOUR_METERED_PASSWORD",
     },
-    {
-      urls: "turn:global.relay.metered.ca:80?transport=tcp",
-      username: "4746e4806424ee775cae0eb7",
-      credential: "fWtNeHJsCEzLoTaK",
-    },
-    {
-      urls: "turn:global.relay.metered.ca:443",
-      username: "4746e4806424ee775cae0eb7",
-      credential: "fWtNeHJsCEzLoTaK",
-    },
-    {
-      urls: "turns:global.relay.metered.ca:443?transport=tcp",
-      username: "4746e4806424ee775cae0eb7",
-      credential: "fWtNeHJsCEzLoTaK",
-    },
+    */
   ],
 };
 

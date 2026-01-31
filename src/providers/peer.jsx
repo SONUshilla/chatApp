@@ -4,24 +4,30 @@ import { useSocket } from "./socket";
 
 // ICE Configuration
 const ICE_CONFIG = {
-  iceServers: [
-    
-    { urls: "stun:stun.relay.metered.ca:80" },
-    { urls: "stun:stun.l.google.com:19302" }, 
-    { urls: "stun:stun1.l.google.com:19302" },
-    /* 
-     * IMPORTANT: Mobile Data (4G/5G) often requires a TURN server.
-     * The free/public ones below are likely expired or dead.
-     * To fix "No Video on Mobile", sign up for free at https://www.metered.ca/ 
-     * and paste your configuration below:
-     */
-    /*
-    {
-      urls: "turn:global.relay.metered.ca:80",
-      username: "YOUR_METERED_USERNAME",
-      credential: "YOUR_METERED_PASSWORD",
-    },
-    */
+   iceServers: [
+      {
+        urls: "stun:stun.relay.metered.ca:80",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80",
+        username: "a231523c6bba67667d5ebf4b",
+        credential: "iBMVkpa1eu8BBK/t",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80?transport=tcp",
+        username: "a231523c6bba67667d5ebf4b",
+        credential: "iBMVkpa1eu8BBK/t",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:443",
+        username: "a231523c6bba67667d5ebf4b",
+        credential: "iBMVkpa1eu8BBK/t",
+      },
+      {
+        urls: "turns:global.relay.metered.ca:443?transport=tcp",
+        username: "a231523c6bba67667d5ebf4b",
+        credential: "iBMVkpa1eu8BBK/t",
+      },
   ],
 };
 

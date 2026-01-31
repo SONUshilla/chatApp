@@ -18,7 +18,7 @@ const About = () => {
           className="text-center mb-16"
         >
           <h1 className="text-5xl font-extrabold mb-6">
-            About <span className="text-gradient">AnonSphere</span>
+            About <span className="text-gradient">Omega</span>
           </h1>
           <p className="text-xl text-gray-400 max-w-3xl mx-auto leading-relaxed">
             Reimagining how the world connects. Safe, anonymous, and instant interactions with people from every corner of the globe.
@@ -36,7 +36,7 @@ const About = () => {
             <h2 className="text-3xl font-bold text-white">Our Mission</h2>
             <p className="text-gray-300 text-lg leading-relaxed">
               In a world that is more connected than ever, true connection is becoming rare. Algorithms dictate who we meet. 
-              AnonSphere breaks these bubbles. We believe in the serendipity of random encounters.
+              Omega breaks these bubbles. We believe in the serendipity of random encounters.
             </p>
             <p className="text-gray-300 text-lg leading-relaxed">
               We provide a platform where you can be yourself—or anyone you want to be—without the pressure of persistent profiles or social graphs.
@@ -52,8 +52,55 @@ const About = () => {
           >
              {/* Decorative placeholder visual */}
              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-500 to-purple-600 opacity-30 blur"></div>
-             <div className="relative h-64 bg-black/50 rounded-xl flex items-center justify-center border border-white/10">
-                <span className="text-gray-500 font-mono text-sm">[ Visual: Network Connection Graph ]</span>
+             <div className="relative h-64 bg-black/50 rounded-xl overflow-hidden border border-white/10 flex items-center justify-center">
+                <svg className="absolute inset-0 w-full h-full" viewBox="0 0 400 200">
+                  {/* Nodes and Links Animation */}
+                  {[...Array(8)].map((_, i) => (
+                    <motion.circle
+                      key={i}
+                      r={4}
+                      fill="#22d3ee" // Cyan-400
+                      initial={{ opacity: 0, scale: 0 }}
+                      animate={{ 
+                        opacity: [0.4, 1, 0.4],
+                        scale: [1, 1.5, 1],
+                        x: [Math.random() * 400, Math.random() * 400],
+                        y: [Math.random() * 200, Math.random() * 200]
+                      }}
+                      transition={{
+                        duration: 5 + Math.random() * 5,
+                        repeat: Infinity,
+                        ease: "linear"
+                      }}
+                    />
+                  ))}
+                  {/* Connecting Lines */}
+                  {[...Array(5)].map((_, i) => (
+                    <motion.line
+                      key={`line-${i}`}
+                      stroke="#8b5cf6" // Purple-500
+                      strokeWidth="1"
+                      strokeOpacity="0.3"
+                      initial={{ pathLength: 0 }}
+                      animate={{ 
+                        x1: [Math.random() * 400, Math.random() * 400],
+                        y1: [Math.random() * 200, Math.random() * 200],
+                        x2: [Math.random() * 400, Math.random() * 400],
+                        y2: [Math.random() * 200, Math.random() * 200]
+                      }}
+                      transition={{
+                        duration: 8,
+                        repeat: Infinity,
+                        repeatType: "reverse",
+                        ease: "linear"
+                      }}
+                    />
+                  ))}
+                </svg>
+                <div className="z-10 text-center">
+                   <div className="text-4xl font-mono font-bold text-white mb-2">10M+</div>
+                   <div className="text-sm text-cyan-400 tracking-widest uppercase">Connections</div>
+                </div>
              </div>
           </motion.div>
         </div>

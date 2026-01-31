@@ -10,7 +10,7 @@ function Room({ setHomeRoom }) {
   const { socket } = useSocket();
   const [remoteStream, setRemoteStream] = useState(null);
   const [remoteId, setRemoteId] = useState(null);
-  const { createOffer, createAnswer, setRemoteAns, peer, addTrack, resetPeer, debugInfo } = usePeer();
+  const { createOffer, createAnswer, setRemoteAns, peer, addTrack, resetPeer } = usePeer();
   const [myStream, setMyStream] = useState(null);
   const [showChat, setShowChat] = useState(false);
   const [chat, setChat] = useState([]);

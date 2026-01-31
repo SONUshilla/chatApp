@@ -4,30 +4,31 @@ import { useSocket } from "./socket";
 
 // ICE Configuration
 const ICE_CONFIG = {
-   iceServers: [
-      {
-        urls: "stun:stun.relay.metered.ca:80",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80",
-        username: "a231523c6bba67667d5ebf4b",
-        credential: "iBMVkpa1eu8BBK/t",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:80?transport=tcp",
-        username: "a231523c6bba67667d5ebf4b",
-        credential: "iBMVkpa1eu8BBK/t",
-      },
-      {
-        urls: "turn:global.relay.metered.ca:443",
-        username: "a231523c6bba67667d5ebf4b",
-        credential: "iBMVkpa1eu8BBK/t",
-      },
-      {
-        urls: "turns:global.relay.metered.ca:443?transport=tcp",
-        username: "a231523c6bba67667d5ebf4b",
-        credential: "iBMVkpa1eu8BBK/t",
-      },
+  iceServers: [
+    
+    { urls: "stun:stun.relay.metered.ca:80" },
+    { urls: "stun:stun.l.google.com:19302" }, 
+    { urls: "stun:stun1.l.google.com:19302" },
+    {
+      urls: "turn:global.relay.metered.ca:80",
+      username: "4746e4806424ee775cae0eb7",
+      credential: "fWtNeHJsCEzLoTaK",
+    },
+    {
+      urls: "turn:global.relay.metered.ca:80?transport=tcp",
+      username: "4746e4806424ee775cae0eb7",
+      credential: "fWtNeHJsCEzLoTaK",
+    },
+    {
+      urls: "turn:global.relay.metered.ca:443",
+      username: "4746e4806424ee775cae0eb7",
+      credential: "fWtNeHJsCEzLoTaK",
+    },
+    {
+      urls: "turns:global.relay.metered.ca:443?transport=tcp",
+      username: "4746e4806424ee775cae0eb7",
+      credential: "fWtNeHJsCEzLoTaK",
+    },
   ],
 };
 
@@ -37,7 +38,6 @@ export const usePeer = () => useContext(PeerContext);
 export const PeerProvider = ({ children,room }) => {
   const [isNegotiating, setIsNegotiating] = useState(false);
   const [peerState, setPeerState] = useState(null); // Just for causing re-renders if needed
-  const [debugInfo, setDebugInfo] = useState({ iceState: 'new', gatheringState: 'new', localCandidates: [], remoteCandidates: [] });
   const peerRef = useRef(null);
   const iceCandidatesQueue = useRef([]);
   const { socket } = useSocket();
@@ -91,18 +91,8 @@ export const PeerProvider = ({ children,room }) => {
     peer.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("ICE Candidate:", event.candidate);
-        setDebugInfo(prev => ({
-            ...prev,
-            localCandidates: [...prev.localCandidates, event.candidate.type]
-        }));
         sendCandidate(event.candidate); 
       }
-    };
-    peer.oniceconnectionstatechange = () => {
-        setDebugInfo(prev => ({ ...prev, iceState: peer.iceConnectionState }));
-    };
-    peer.onicegatheringstatechange = () => {
-        setDebugInfo(prev => ({ ...prev, gatheringState: peer.iceGatheringState }));
     };
   };
 
@@ -214,7 +204,7 @@ export const PeerProvider = ({ children,room }) => {
   };
 
   return (
-    <PeerContext.Provider value={{ peer: peerState || peerRef.current, createOffer, createAnswer, setRemoteAns, addTrack, resetPeer, debugInfo }}>
+    <PeerContext.Provider value={{ peer: peerState || peerRef.current, createOffer, createAnswer, setRemoteAns, addTrack, resetPeer }}>
       {children}
     </PeerContext.Provider>
   );

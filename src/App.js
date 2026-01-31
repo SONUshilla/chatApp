@@ -9,6 +9,7 @@ import Room from "./room";
 import Chat from "./chatRoom";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
+import Privacy from "./pages/Privacy";
 import Layout from "./components/Layout";
 
 const App = () => {
@@ -21,6 +22,7 @@ const App = () => {
           <Route path="/" element={<HomePage homeRoom={homeRoom} />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="/chatRoom" element={<Chat />} />
           <Route 
             path="/videoRoom" 

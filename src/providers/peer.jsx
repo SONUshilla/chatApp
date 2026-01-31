@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useState, useContext, useCallback } from "react";
+import React, { createContext, useEffect, useState, useContext, useCallback, useRef } from "react";
 import { useSocket } from "./socket";
 
 
@@ -35,51 +35,115 @@ export const usePeer = () => useContext(PeerContext);
 
 export const PeerProvider = ({ children,room }) => {
   const [isNegotiating, setIsNegotiating] = useState(false);
-  const [peer, setPeer] = useState(() => new RTCPeerConnection(ICE_CONFIG));
+  const [peerState, setPeerState] = useState(null); // Just for causing re-renders if needed
+  const peerRef = useRef(null);
+  const iceCandidatesQueue = useRef([]);
   const { socket } = useSocket();
 
-  const sendCandidate = useCallback((candidate) => {
-    socket.emit("ice-candidate",{ room,candidate});
-  },[room, socket]);
-  
+  const getPeer = () => {
+    if (!peerRef.current || peerRef.current.signalingState === "closed") {
+       console.warn("Reinitializing Peer Connection (getPeer)...");
+       const newPeer = new RTCPeerConnection(ICE_CONFIG);
+       setupPeerEvents(newPeer, sendCandidate);
+       peerRef.current = newPeer;
+       setPeerState(newPeer); // Trigger re-render
+       return newPeer;
+    }
+    return peerRef.current;
+  };
 
-  // Listen for ICE Candidates from the server
+  // Initialize on mount
   useEffect(() => {
-    socket.on("ice-candidate", (candidate) => {
-      console.log("Received ICE Candidate:", candidate);
-      peer.addIceCandidate(new RTCIceCandidate(candidate));
-    });
+    if (!peerRef.current) {
+        getPeer();
+    }
+    return () => {
+        // Cleanup on unmount
+        if (peerRef.current) {
+            peerRef.current.close();
+            peerRef.current = null;
+        }
+    };
+  }, []);
 
-    return () => socket.off("ice-candidate");
-  }, [peer, socket]);
+  const resetPeer = useCallback(() => {
+      console.log("Resetting Peer Connection...");
+      if (peerRef.current) {
+          peerRef.current.close();
+      }
+      peerRef.current = new RTCPeerConnection(ICE_CONFIG);
+      setupPeerEvents(peerRef.current, sendCandidate);
+      iceCandidatesQueue.current = []; // Clear queue
+      setPeerState(peerRef.current);
+      return peerRef.current;
+  }, []);
 
   const setupPeerEvents = (peer, sendCandidate) => {
     peer.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("ICE Candidate:", event.candidate);
-        sendCandidate(event.candidate); // Send ICE candidate to signaling server
+        sendCandidate(event.candidate); 
       }
     };
   };
 
-  const reinitializePeer = () => {
-    console.warn("Reinitializing Peer Connection...");
-    const newPeer = new RTCPeerConnection(ICE_CONFIG);
-    setupPeerEvents(newPeer, sendCandidate);
-    setPeer(newPeer);
-    return newPeer;
+  const sendCandidate = useCallback((candidate) => {
+    socket.emit("ice-candidate",{ room,candidate});
+  },[room, socket]);
+  
+  const processIceQueue = async (currentPeer) => {
+    while (iceCandidatesQueue.current.length > 0) {
+      const candidate = iceCandidatesQueue.current.shift();
+      try {
+        await currentPeer.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.error("Error adding queued ICE candidate:", e);
+      }
+    }
   };
 
+  // Listen for ICE Candidates
   useEffect(() => {
-    setupPeerEvents(peer, sendCandidate);
-    return () => peer.close();
-  }, [peer, sendCandidate]);
+    socket.on("ice-candidate", async (candidate) => {
+      console.log("Received ICE Candidate:", candidate);
+      const currentPeer = peerRef.current;
+      if (!currentPeer || currentPeer.signalingState === "closed") {
+        console.warn("Peer connection closed, ignoring ICE candidate");
+        return;
+      }
+      
+      if (!currentPeer.remoteDescription) {
+        console.log("Queueing ICE candidate (no remote description)");
+        iceCandidatesQueue.current.push(candidate);
+        return;
+      }
+      try {
+        await currentPeer.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.error("Error adding ICE candidate:", e);
+      }
+    });
+
+    return () => socket.off("ice-candidate");
+  }, [socket]);
+
+  const addTrack = useCallback((track, stream) => {
+      const currentPeer = getPeer();
+      const senderExists = currentPeer.getSenders().some((sender) => sender.track === track);
+      if (!senderExists) {
+          console.log("Adding track to peer:", track.kind);
+          currentPeer.addTrack(track, stream);
+      } else {
+          console.log("Track already exists, skipping add:", track.kind);
+      }
+  }, []);
 
   const createOffer = async () => {
     try {
-      if (isNegotiating) return;
-      let currentPeer = peer;
-      if (peer.signalingState === "closed") currentPeer = reinitializePeer();
+      if (isNegotiating) {
+          console.warn("Already negotiating, careful with createOffer");
+      }
+      const currentPeer = getPeer();
 
       setIsNegotiating(true);
       const offer = await currentPeer.createOffer();
@@ -94,12 +158,15 @@ export const PeerProvider = ({ children,room }) => {
 
   const createAnswer = async (offer) => {
     try {
-      if (isNegotiating) return;
-      let currentPeer = peer;
-      if (peer.signalingState === "closed") currentPeer = reinitializePeer();
+      if (!offer) {
+          console.error("createAnswer called with null offer");
+          return;
+      }
+      const currentPeer = getPeer();
 
       setIsNegotiating(true);
       await currentPeer.setRemoteDescription(offer);
+      await processIceQueue(currentPeer);
       const answer = await currentPeer.createAnswer();
       await currentPeer.setLocalDescription(answer);
       return answer;
@@ -112,16 +179,18 @@ export const PeerProvider = ({ children,room }) => {
 
   const setRemoteAns = async (ans) => {
     try {
-      if (ans) await peer.setRemoteDescription(ans);
+      if (ans) {
+          const currentPeer = getPeer();
+          await currentPeer.setRemoteDescription(ans);
+          await processIceQueue(currentPeer);
+      }
     } catch (error) {
       console.error("Error setting remote description:", error);
     }
   };
 
-
-
   return (
-    <PeerContext.Provider value={{ peer, createOffer, createAnswer, setRemoteAns }}>
+    <PeerContext.Provider value={{ peer: peerState || peerRef.current, createOffer, createAnswer, setRemoteAns, addTrack, resetPeer }}>
       {children}
     </PeerContext.Provider>
   );

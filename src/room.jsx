@@ -1,25 +1,28 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { usePeer } from "./providers/peer";
 import { useSocket } from "./providers/socket";
 import ReactPlayer from "react-player";
 import { motion, AnimatePresence } from "framer-motion";
+
 function Room({ setHomeRoom }) {
+  const navigate = useNavigate();
   const { socket } = useSocket();
   const [remoteStream, setRemoteStream] = useState(null);
   const [remoteId, setRemoteId] = useState(null);
-  const { createOffer, createAnswer, setRemoteAns, peer } = usePeer();
+  const { createOffer, createAnswer, setRemoteAns, peer, addTrack, resetPeer } = usePeer();
   const [myStream, setMyStream] = useState(null);
   const [showChat, setShowChat] = useState(false);
   const [chat, setChat] = useState([]);
   const [message, setMessage] = useState("");
   const [room, setRoom] = useState("");
-  const [buttonText, setButtonText] = useState("End Chat");
   const [status, setStatus] = useState("waiting");
-  const [iceState, setIceState] = useState(null);
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const [reconnectionAttempts, setReconnectionAttempts] = useState(0);
   const MAX_RETRIES = 3;
   const [visible, setVisible] = useState(true);
+  const [callEnded, setCallEnded] = useState(false);
+  const isPartnerDisconnected = useRef(false);
 
   useEffect(() => {
     let timer;
@@ -43,6 +46,11 @@ function Room({ setHomeRoom }) {
     };
   }, []);
 
+  // Auto-join room on mount
+  useEffect(() => {
+    socket.emit("joinVideoRoom");
+  }, [socket]);
+
   const handleRoom = useCallback(
     async (data) => {
       const { room } = data;
@@ -60,15 +68,17 @@ function Room({ setHomeRoom }) {
     );
 
     socket.on("notification", (data) => {
-      setChat([{ text: data.message, isSystem: true }]);
+      setChat((prev) => [...prev, { text: data.message, isSystem: true }]);
     });
 
     return () => {
       socket.off("waiting");
       socket.off("roomJoined", handleRoom);
+      socket.off("videoMessage");
+      socket.off("notification");
+      socket.emit("leaveQueue"); // Tell server we're leaving
     };
-    // eslint-disable-next-line no-use-before-define
-  }, [handleRoom, socket]);
+  }, [handleRoom, socket]); 
 
   const handleSendMessage = (e) => {
     e.preventDefault();
@@ -78,6 +88,62 @@ function Room({ setHomeRoom }) {
       setMessage("");
     }
   };
+
+  const resetRoom = useCallback(() => {
+    setRemoteStream(null);
+    setRemoteId(null);
+    setChat([]);
+    setStatus("waiting");
+    setShowConfirmPopup(false);
+    isPartnerDisconnected.current = false;
+    if (myStream) {
+      myStream.getTracks().forEach((track) => track.stop());
+      setMyStream(null);
+    }
+    // Correctly reset peer via provider
+    resetPeer();
+  }, [myStream, resetPeer]);
+
+  const handleEndCall = () => {
+    setShowConfirmPopup(true);
+  };
+
+  const confirmEndCall = useCallback(() => {
+    socket.emit("endChat", room);
+    resetRoom();
+    socket.emit("joinVideoRoom");
+  }, [room, socket, resetRoom]);
+
+  // Stop Call: End chat, close connection, go to idle/home state
+  const stopCall = useCallback(() => {
+    socket.emit("endChat", room);
+    setRemoteStream(null);
+    setRemoteId(null);
+    setChat([]);
+    setStatus("idle");
+    setCallEnded(true);
+    setShowConfirmPopup(false);
+    if (myStream) {
+      myStream.getTracks().forEach((track) => track.stop());
+      setMyStream(null);
+    }
+    resetPeer(); // Close peer properly
+    navigate('/');
+  }, [room, socket, myStream, resetPeer, navigate]);
+
+  // Skip: End current chat and find next partner immediately
+  const skipCall = useCallback(() => {
+    if (status !== "disconnected") {
+      socket.emit("endChat", room);
+    }
+    resetRoom();
+    socket.emit("joinVideoRoom");
+  }, [room, socket, resetRoom, status]);
+
+  const cancelEndCall = () => {
+    setShowConfirmPopup(false);
+  };
+
   const handleRoomJoined = useCallback(
     async (data) => {
       const { id } = data;
@@ -91,6 +157,13 @@ function Room({ setHomeRoom }) {
         });
         setMyStream(stream);
 
+        // Add tracks immediately so they are included in the initial offer
+        stream.getTracks().forEach((track) => {
+             // Use addTrack from provider to ensure we target the active peer
+             addTrack(track, stream);
+        });
+
+        console.log("Offer creation with tracks..."); // Log
         const offer = await createOffer();
         socket.emit("call-user", { id, offer });
         console.log("Offer sent to user:", id);
@@ -98,17 +171,13 @@ function Room({ setHomeRoom }) {
         console.error("Error creating offer:", error);
       }
     },
-    [createOffer, socket]
+    [createOffer, socket, peer]
   );
+
   const sendStream = useCallback(() => {
     if (myStream) {
       myStream.getTracks().forEach((track) => {
-        const senderExists = peer
-          .getSenders()
-          .some((sender) => sender.track === track);
-        if (!senderExists) {
-          peer.addTrack(track, myStream);
-        }
+        addTrack(track, myStream);
       });
     }
   }, [myStream, peer]);
@@ -116,6 +185,10 @@ function Room({ setHomeRoom }) {
   const handleIncomingCall = useCallback(
     async (data) => {
       const { id, offer } = data;
+      if (!offer) {
+          console.error("Incoming call received without offer, ignoring.");
+          return;
+      }
       console.log("Incoming call from:", id);
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -125,13 +198,18 @@ function Room({ setHomeRoom }) {
         setMyStream(stream);
         setRemoteId(id);
 
+        // Add tracks immediately so they are included in the answer
+        stream.getTracks().forEach((track) => {
+             addTrack(track, stream);
+        });
+
         const ans = await createAnswer(offer);
         socket.emit("call-accepted", { id, ans });
       } catch (error) {
         console.error("Error creating answer:", error);
       }
     },
-    [createAnswer, socket]
+    [createAnswer, socket, peer]
   );
 
   const handleCallAccepted = useCallback(
@@ -161,36 +239,38 @@ function Room({ setHomeRoom }) {
     },
     [sendStream, setRemoteAns]
   );
-  // Update handlePartnerDisconnected
+
   const handlePartnerDisconnected = useCallback(async () => {
     try {
-      console.log("am i running");
+      console.log("Partner disconnected");
+      isPartnerDisconnected.current = true;
       if (myStream) {
         myStream.getTracks().forEach((track) => track.stop());
         setMyStream(null);
       }
-      setChat((prev) => [
-        ...prev,
-        {
-          text: "Partner disconnected. Searching...",
-          isSystem: true,
-        },
-      ]);
       setRemoteStream(null);
       setRemoteId(null);
       peer.close();
-      socket.emit("joinVideoRoom");
-      setStatus("waiting");
+      // Disable auto-search:
+      // socket.emit("joinVideoRoom"); 
+      setStatus("disconnected"); 
     } catch (error) {
       console.error("Error handling disconnect:", error);
     }
-  }, [myStream, peer, socket]);
+  }, [myStream, peer]);
 
   useEffect(() => {
+    if (!peer) return; // Guard against null peer
     const handleTrackEvent = (event) => {
-      console.log("Received remote stream", event.streams[0]);
-      setStatus("paired");
-      setRemoteStream(event.streams[0]);
+      console.log("TRACK EVENT FIRED", event);
+      if (event.streams && event.streams[0]) {
+          console.log("Received remote stream with id:", event.streams[0].id);
+          console.log("Stream tracks:", event.streams[0].getTracks());
+          setStatus("paired");
+          setRemoteStream(event.streams[0]);
+      } else {
+          console.warn("Track event fired but no stream found!");
+      }
     };
 
     peer.addEventListener("track", handleTrackEvent);
@@ -200,96 +280,74 @@ function Room({ setHomeRoom }) {
     };
   }, [peer]);
 
-  // Replace the oniceconnectionstatechange with useEffect
   useEffect(() => {
+    if (!peer) return; // Guard
     const handleIceConnectionStateChange = async () => {
       const state = peer.iceConnectionState;
       console.log("ICE Connection State:", state);
-      setIceState(state);
-
+      
       if (state === "connected" || state === "completed") {
         console.log("ICE state connected");
-        setButtonText("End Call");
         setStatus("paired");
         sendStream();
         setReconnectionAttempts(0);
       } else if (state === "disconnected") {
-        if (reconnectionAttempts < MAX_RETRIES) {
-          setButtonText("End Call");
+        if (!isPartnerDisconnected.current && reconnectionAttempts < MAX_RETRIES) {
           console.log(`Restarting ICE... Attempt ${reconnectionAttempts + 1}`);
-          setReconnectionAttempts(reconnectionAttempts + 1);
+          setReconnectionAttempts(prev => prev + 1);
           try {
-            // Create a new offer with ICE restart enabled
             const offer = await peer.createOffer({ iceRestart: true });
             await peer.setLocalDescription(offer);
-            socket.emit("nego-call-user", { id: remoteId, offer });
+            // Need remoteId here. If disconnected, we might still have it.
+            if (remoteId) {
+                socket.emit("nego-call-user", { id: remoteId, offer });
+            }
           } catch (error) {
             console.error("Error restarting ICE:", error);
           }
         } else {
-          socket.emit("endChat", room);
-          peer.close();
-          setRemoteStream(null);
-          setRemoteId(null);
-          socket.emit("joinVideoRoom");
+          // Max retries reached, end call
+          confirmEndCall();
         }
       } else if (state === "failed") {
         console.log("ICE connection failed, restarting...");
-        socket.emit("joinVideoRoom");
-        setRemoteStream(null);
-        setRemoteId(null);
-        if (myStream) {
-          myStream.getTracks().forEach((track) => track.stop());
-          setMyStream(null);
+        if (!isPartnerDisconnected.current) {
+             confirmEndCall(); 
         }
-        peer.close();
-        setChat((prev) => [
-          ...prev,
-          {
-            text: "Connection failed. Searching for new partner...",
-            isSystem: true,
-          },
-        ]);
       }
     };
 
-    peer.addEventListener(
-      "iceconnectionstatechange",
-      handleIceConnectionStateChange
-    );
+    peer.addEventListener("iceconnectionstatechange", handleIceConnectionStateChange);
     return () => {
-      peer.removeEventListener(
-        "iceconnectionstatechange",
-        handleIceConnectionStateChange
-      );
+      peer.removeEventListener("iceconnectionstatechange", handleIceConnectionStateChange);
     };
-  }, [
-    peer,
-    sendStream,
-    socket,
-    myStream,
-    remoteId,
-    reconnectionAttempts,
-    room,
-  ]);
+  }, [peer, sendStream, socket, remoteId, reconnectionAttempts, confirmEndCall]);
 
   const handleNegotiation = useCallback(async () => {
+    if (!peer) return; // Guard
     try {
       if (!remoteId) {
         console.log("Remote ID not set, skipping negotiation.");
         return;
       }
+      // Critical Check: Don't negotiate if we are already in the middle of a handshake (e.g. initial call)
+      // This prevents the "stuck at creating offer" bug caused by addTrack triggering this event prematurely.
+      if (peer.signalingState !== "stable") {
+         console.log("Signaling state not stable, skipping auto-negotiation.");
+         return;
+      }
+
       console.log("Negotiation needed, creating offer...");
       const offer = await createOffer();
       socket.emit("nego-call-user", { id: remoteId, offer });
     } catch (error) {
       console.error("Error during negotiation:", error);
     }
-  }, [remoteId, createOffer, socket]);
+  }, [remoteId, createOffer, socket, peer]);
 
   useEffect(() => {
+    if (!peer) return; // Guard
     peer.addEventListener("negotiationneeded", handleNegotiation);
-
     return () => {
       peer.removeEventListener("negotiationneeded", handleNegotiation);
     };
@@ -299,19 +357,22 @@ function Room({ setHomeRoom }) {
     async (data) => {
       const { id, offer } = data;
       if (!offer) {
-        handleNegotiation();
+        // If no offer, maybe we initiated? Logic here seems to handle both sides?
+        // Actually usually negotiation incoming implies an offer is present.
+        // User code line 302: handleNegotiation(); ??
+        // If incoming negotiaton has no offer, something is wrong or it's a diff protocol.
+        // Assuming offer is present.
       }
       console.log("Nego Incoming call from:", id);
       try {
-        console.log(offer);
         const ans = await createAnswer(offer);
-        sendStream();
+        // sendStream(); // Should be sending already?
         socket.emit("nego-call-accepted", { id, ans });
       } catch (error) {
         console.error("Error creating answer:", error);
       }
     },
-    [createAnswer, handleNegotiation, sendStream, socket]
+    [createAnswer, socket]
   );
 
   useEffect(() => {
@@ -340,65 +401,96 @@ function Room({ setHomeRoom }) {
     handlePartnerDisconnected,
   ]);
 
-  // Update handleCallEnded to stop tracks and reset state
-  const handleCallEnded = () => {
-    if (buttonText === "End Call") {
-      setButtonText("really");
-    } else if (buttonText === "really") {
-      setButtonText("Start New Chat");
-      if (myStream) {
-        myStream.getTracks().forEach((track) => track.stop());
-        setMyStream(null);
-      }
-      socket.emit("endChat", room);
-      peer.close();
-      setRemoteStream(null);
-      setRemoteId(null);
-    } else {
-      setButtonText("End Call");
-      setRemoteStream(null);
-      setRemoteId(null);
-      socket.emit("joinVideoRoom");
-      setStatus("waiting");
-    }
-  };
-
   return (
-    <div className="h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
-      <div className="flex h-full  p-4 space-x-4 relative">
+    <div className="h-[100dvh] bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 overflow-hidden flex flex-col">
+      <div className="flex-1 flex flex-col lg:flex-row h-full p-2 lg:p-4 gap-4 relative overflow-hidden">
         {/* Video Streams Section */}
-        <div className="flex-1 flex flex-col space-y-4">
+        <div className="flex-1 flex flex-col relative w-full h-full rounded-2xl overflow-hidden">
           {/* Remote Stream or Connecting Placeholder */}
           {remoteStream ? (
-            <div className="relative bg-black rounded-xl lg:h-full h-2/3 overflow-hidden shadow-2xl border-2 border-cyan-400">
-              <div className="absolute top-2 left-2 bg-black/50 px-3 py-1 rounded-full text-cyan-400 text-sm">
+            <div className="relative w-full h-full bg-black">
+              <div className="absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-cyan-400 text-sm z-10 backdrop-blur-sm border border-cyan-400/30">
                 Partner
               </div>
               <ReactPlayer
                 playing
+                playsinline // Vital for mobile
                 url={remoteStream}
                 width="100%"
                 height="100%"
-                className="rounded-lg"
+                className="bg-black"
+                style={{ backgroundColor: 'black', objectFit: 'cover' }}
+                onError={(e) => console.error("ReactPlayer Error:", e)}
               />
             </div>
+          ) : status === "idle" ? (
+            <div className="relative w-full h-full flex items-center justify-center bg-black/90 backdrop-blur-sm">
+               <div className="text-center">
+                  <h3 className="text-white text-xl mb-4 font-bold">Call Ended</h3>
+                  <button 
+                    onClick={() => { socket.emit("joinVideoRoom"); setStatus("waiting"); setCallEnded(false); }}
+                    className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-full font-bold shadow-lg transition-all transform hover:scale-105"
+                  >
+                    Start New Chat
+                  </button>
+                </div>
+            </div>
+          ) : status === "disconnected" ? (
+            <div className="relative bg-black rounded-xl lg:h-full h-2/3 flex items-center justify-center shadow-2xl border-2 border-orange-500/50">
+               <div className="text-center p-8">
+                  <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                    <svg className="w-8 h-8 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-white text-2xl mb-2 font-bold">Partner Disconnected</h3>
+                  <p className="text-gray-400 mb-8">The remote user has left the chat.</p>
+                  
+                  <div className="flex flex-col gap-3 max-w-xs mx-auto">
+                    <button 
+                      onClick={skipCall}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      Find New Partner
+                    </button>
+                    <button 
+                      onClick={stopCall}
+                      className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      Exit to Home
+                    </button>
+                  </div>
+               </div>
+            </div>
           ) : (
-            <div className="relative bg-black rounded-xl lg:h-full h-2/3 flex items-center justify-center shadow-2xl border-2 border-cyan-400">
+            <div className="relative w-full h-full flex items-center justify-center bg-black rounded-2xl border border-cyan-400/20 shadow-2xl shadow-cyan-900/20">
               <div className="flex flex-col items-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-400 mb-4"></div>
-                <span className="text-cyan-400 text-sm">Connecting...</span>
+                <span className="text-cyan-400 text-sm">
+                   {status === "waiting" ? "Searching for partner..." : "Connecting..."}
+                </span>
               </div>
             </div>
           )}
 
-          {/* Local Stream */}
+          {/* Local Stream - PiP */}
           {myStream && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="lg:absolute lg:bottom-20 lg:left-20  h-1/3  bg-black rounded-xl overflow-hidden shadow-2xl border-2 border-purple-400"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              drag
+              dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+              dragElastic={0.1}
+              // Mobile: Bottom-right (above footer), Desktop: Bottom-right
+              className="absolute bottom-28 right-4 w-28 h-40 sm:w-32 sm:h-48 lg:bottom-8 lg:right-8 lg:w-64 lg:h-48 bg-black rounded-xl overflow-hidden shadow-2xl border-2 border-purple-500/50 z-20 cursor-move hover:border-purple-400 transition-colors"
             >
-              <div className="relative top-2 left-2 bg-black/50 px-3 py-1 rounded-full text-purple-400 text-sm">
+              <div className="absolute top-2 left-2 bg-black/60 px-2 py-0.5 rounded-full text-purple-400 text-[10px] lg:text-xs z-20 backdrop-blur-sm font-medium">
                 You
               </div>
               <ReactPlayer
@@ -407,7 +499,8 @@ function Room({ setHomeRoom }) {
                 url={myStream}
                 width="100%"
                 height="100%"
-                className="rounded-lg"
+                className="scale-x-[-1]" // Mirror local video
+                style={{ backgroundColor: 'black', objectFit: 'cover' }}
               />
             </motion.div>
           )}
@@ -420,12 +513,20 @@ function Room({ setHomeRoom }) {
               initial={{ opacity: 0, x: 100 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 100 }}
-              className="w-96 bg-black/80 backdrop-blur-lg rounded-xl shadow-2xl border-2 border-cyan-400/30 flex flex-col"
+              className="absolute inset-0 lg:relative lg:inset-auto lg:w-96 bg-gray-900/95 lg:bg-black/40 backdrop-blur-xl lg:rounded-2xl border-l lg:border border-cyan-400/20 shadow-2xl z-30 flex flex-col"
             >
-              <div className="p-4 border-b border-cyan-400/30">
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
-                  Chat
+              <div className="p-4 border-b border-cyan-400/20 flex justify-between items-center">
+                <h2 className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                  Chat Room
                 </h2>
+                <button 
+                  onClick={() => setShowChat(false)}
+                  className="lg:hidden text-gray-400 hover:text-white"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
 
               <div className="flex-1 p-4 space-y-4 overflow-y-auto scrollbar-thin scrollbar-thumb-cyan-400/50 scrollbar-track-transparent">
@@ -441,7 +542,7 @@ function Room({ setHomeRoom }) {
                     <div
                       className={`max-w-[80%] p-3 rounded-xl ${
                         msg.isSystem
-                          ? "bg-cyan-400/20 text-cyan-400 text-center"
+                          ? "bg-cyan-400/20 text-cyan-400 text-center text-xs"
                           : msg.isMe
                           ? "bg-purple-400/20 text-purple-200"
                           : "bg-cyan-400/20 text-cyan-200"
@@ -483,30 +584,52 @@ function Room({ setHomeRoom }) {
         </AnimatePresence>
 
         {showConfirmPopup && (
-          <div className="fixed inset-0 p-7 bg-black bg-opacity-50 flex items-center justify-center">
-            <div className="bg-white p-6 rounded-lg shadow-lg text-center">
-              <p className="mb-4 text-gray-800">
-                Are you sure you want to end the chat?
-              </p>
-              <div className="flex justify-center gap-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-gray-800 border border-white/10 p-6 rounded-2xl shadow-2xl max-w-md w-full mx-4 text-center"
+            >
+              <h3 className="text-xl font-bold text-white mb-4">End Call?</h3>
+              <p className="text-gray-400 mb-8">What would you like to do next?</p>
+              
+              <div className="flex flex-col gap-3">
                 <button
-                  className="bg-red-500 text-white px-4 py-2 rounded-md"
-                  onClick={handleCallEnded}
+                  onClick={skipCall}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2 group"
                 >
-                  Yes
+                  <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                  </svg>
+                  Skip & Find New Partner
                 </button>
-                <button className="bg-gray-400 text-white px-4 py-2 rounded-md">
-                  Cancel
+                
+                <button
+                  onClick={stopCall}
+                  className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Stop & Exit
+                </button>
+
+                <button
+                  onClick={cancelEndCall}
+                  className="mt-2 text-gray-400 hover:text-white transition-colors text-sm font-semibold"
+                >
+                  Cancel (Return to Call)
                 </button>
               </div>
-            </div>
+            </motion.div>
           </div>
         )}
 
-        {/* Chat Toggle Button */}
+        {/* Chat Toggle Button - Mobile Position adjusted */}
         <button
           onClick={() => setShowChat(!showChat)}
-          className="absolute top-6 right-6 w-12 h-12 bg-cyan-400/20 backdrop-blur-lg rounded-full flex items-center justify-center hover:bg-cyan-400/30 transition-colors shadow-2xl border border-cyan-400/30"
+          className="absolute top-4 right-4 lg:top-6 lg:right-6 w-10 h-10 lg:w-12 lg:h-12 bg-cyan-400/20 backdrop-blur-lg rounded-full flex items-center justify-center hover:bg-cyan-400/30 transition-colors shadow-2xl border border-cyan-400/30 z-30"
         >
           <svg
             className={`w-6 h-6 text-cyan-400 transition-transform ${
@@ -525,26 +648,27 @@ function Room({ setHomeRoom }) {
           </svg>
         </button>
       </div>
-      <div
-        className={`absolute flex bottom-5 w-full justify-center text-white px-1 py-2 rounded transition-all duration-300 ${
-          visible || buttonText === "Start New Chat"
-            ? "opacity-100"
-            : "opacity-0 pointer-events-none"
-        }`}
-      >
-        <button
-          onClick={handleCallEnded}
-          className={`${
-            buttonText === "Start New Chat" ? "bg-green-600" : "bg-red-700"
-          } p-4 rounded-lg`}
+      
+      {/* Footer Controls */}
+      {status !== "disconnected" && status !== "idle" && !showChat && (
+        <div
+          className={`fixed bottom-6 left-0 right-0 px-4 flex justify-center lg:absolute lg:bottom-8 lg:left-1/2 lg:right-auto lg:transform lg:-translate-x-1/2 lg:w-auto transition-all duration-300 z-40 ${
+            visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10 pointer-events-none"
+          }`}
         >
-          <span>{buttonText}</span>
-        </button>
-      </div>
+          <button
+            onClick={handleEndCall}
+            className="w-auto bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-full font-bold shadow-lg transition-all transform hover:scale-105 active:scale-95 flex items-center justify-center gap-2 text-sm lg:text-base"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
+            </svg>
+            {status === "waiting" ? "Stop Searching" : "End Call"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
-
-// Styles remain the same
 
 export default Room;
